@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:credflare_sdk/credflare_sdk.dart';
 
@@ -7,8 +8,10 @@ void main() {
   late HttpServer server;
   late CredflareSession client;
   final calls = <HttpRequest>[];
+  final bodies = <String>[];
   setUp(() async {
     calls.clear();
+    bodies.clear();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       calls.add(request);
@@ -19,7 +22,7 @@ void main() {
           : request.headers.value('authorization') == 'Bearer wrong'
           ? 'unauthorized'
           : 'session';
-      await request.drain<void>();
+      bodies.add(await utf8.decoder.bind(request).join());
       request.response.statusCode = name == 'unauthorized'
           ? 401
           : name == 'session'
@@ -58,6 +61,8 @@ void main() {
       bytes: [1, 2, 3],
       filename: 'front.png',
       key: key,
+      documentTypeId: 7,
+      source: 'camera',
     );
     final id = await client.submit({
       'type': 'document_verification',
@@ -67,6 +72,8 @@ void main() {
     expect(id, 1);
     expect(calls.first.headers.value('x-idempotency-key'), key);
     expect(calls.first.headers.contentType!.mimeType, 'multipart/form-data');
+    expect(bodies.first, contains('name="document_type_id"\r\n\r\n7\r\n'));
+    expect(bodies.first, contains('name="capture_source"\r\n\r\ncamera\r\n'));
   });
   test('rejects remote HTTP API destinations', () {
     expect(

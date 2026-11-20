@@ -9,6 +9,7 @@ dependencies:
     sdk: flutter
   credflare_sdk:
     path: ../
+  http: ^1.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

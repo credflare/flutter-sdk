@@ -31,7 +31,7 @@ class CredflareException implements Exception {
   final int status;
   final Object? errors;
   CredflareException(this.message, this.status, [this.errors]);
-  String get kind => status == 0
+  String get type => status == 0
       ? 'network'
       : status == 401
       ? 'session_unavailable'
@@ -90,12 +90,12 @@ class CredflareSession {
       ).timeout(const Duration(seconds: 60));
     } on http.ClientException {
       throw CredflareException(
-        'Could not reach CredFlare. Retry with the same request key.',
+        'Could not reach Credflare. Retry with the same request key.',
         0,
       );
     } on TimeoutException {
       throw CredflareException(
-        'CredFlare timed out. Retry with the same request key.',
+        'Credflare timed out. Retry with the same request key.',
         0,
       );
     }
@@ -104,7 +104,7 @@ class CredflareSession {
       envelope = jsonDecode(response.body);
     } on FormatException {
       throw CredflareException(
-        'CredFlare returned an invalid response.',
+        'Credflare returned an invalid response.',
         response.statusCode,
       );
     }
@@ -134,15 +134,21 @@ class CredflareSession {
     required List<int> bytes,
     required String filename,
     required String key,
+    int? documentTypeId,
     String type = 'documents',
     String side = 'front',
+    String source = 'upload',
   }) async {
     if (!['documents', 'biometrics'].contains(type) ||
         !['front', 'back'].contains(side)) {
       throw ArgumentError('Invalid upload type or side.');
     }
     final request = http.MultipartRequest('POST', _url('/uploads/$type'))
+      ..fields.addAll({
+        if (documentTypeId != null) 'document_type_id': '$documentTypeId',
+      })
       ..fields['side'] = side
+      ..fields['capture_source'] = source
       ..files.add(
         http.MultipartFile.fromBytes('file', bytes, filename: filename),
       );
