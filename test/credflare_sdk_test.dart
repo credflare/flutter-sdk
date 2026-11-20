@@ -17,7 +17,7 @@ void main() {
       calls.add(request);
       final name = request.uri.path.endsWith('/submit')
           ? 'submission'
-          : request.uri.path.endsWith('/uploads/documents')
+          : request.uri.path.contains('/uploads/')
           ? 'upload'
           : request.headers.value('authorization') == 'Bearer wrong'
           ? 'unauthorized'
@@ -74,6 +74,23 @@ void main() {
     expect(calls.first.headers.contentType!.mimeType, 'multipart/form-data');
     expect(bodies.first, contains('name="document_type_id"\r\n\r\n7\r\n'));
     expect(bodies.first, contains('name="capture_source"\r\n\r\ncamera\r\n'));
+  });
+  test('sends selfies through biometric uploads with camera source', () async {
+    final uploaded = await client.upload(
+      bytes: [1, 2, 3],
+      filename: 'selfie.jpg',
+      key: requestKey(),
+      type: 'biometrics',
+      source: 'camera',
+    );
+    await client.submit({
+      'type': 'facial_verification',
+      'image_file_id': uploaded['id'],
+    }, key: requestKey());
+    expect(calls.first.uri.path, endsWith('/uploads/biometrics'));
+    expect(bodies.first, contains('name="capture_source"\r\n\r\ncamera\r\n'));
+    expect(bodies.first, isNot(contains('document_type_id')));
+    expect(jsonDecode(bodies.last)['type'], 'facial_verification');
   });
   test('rejects remote HTTP API destinations', () {
     expect(

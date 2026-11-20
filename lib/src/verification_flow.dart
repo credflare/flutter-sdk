@@ -4,6 +4,7 @@ import 'capture_plan.dart';
 import 'client.dart';
 import 'document_capture.dart';
 import 'theme.dart';
+import 'selfie_capture.dart';
 
 typedef SessionProvider = Future<SessionDescriptor> Function();
 
@@ -147,9 +148,10 @@ class _VerificationState extends State<CredflareVerification> {
         _pendingReceipt = false;
       });
       final profile = info['profile'] as Map?;
-      if ((profile?['document_requirements'] as List? ?? []).isEmpty &&
-          (profile?['form_schema'] as List? ?? []).isEmpty &&
-          (profile?['verification_requirements'] as List? ?? []).isEmpty) {
+      if (profile != null &&
+          (profile['document_requirements'] as List? ?? []).isEmpty &&
+          (profile['form_schema'] as List? ?? []).isEmpty &&
+          (profile['verification_requirements'] as List? ?? []).isEmpty) {
         widget.onSubmitted?.call(info);
       }
     } catch (error) {
@@ -222,7 +224,7 @@ class _VerificationState extends State<CredflareVerification> {
     if (await _confirm(
       title: 'Leave for now?',
       body:
-          'Documents you already sent are kept. You can come back through the app that asked for them.',
+          'Evidence you already sent is kept. Unsent photos and files will be discarded. You can return through the requesting app.',
       stay: 'Keep going',
       leave: 'Leave for now',
     )) {
@@ -254,11 +256,16 @@ class _VerificationState extends State<CredflareVerification> {
 
   Widget _title(ThemeData theme, String text) => Semantics(
     header: true,
-    child: Text(text, style: theme.textTheme.headlineSmall),
+    child: Text(
+      text,
+      textAlign: TextAlign.center,
+      style: theme.textTheme.headlineSmall,
+    ),
   );
 
   Widget _muted(ThemeData theme, String text) => Text(
     text,
+    textAlign: TextAlign.center,
     style: theme.textTheme.bodyLarge?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     ),
@@ -282,7 +289,7 @@ class _VerificationState extends State<CredflareVerification> {
   Widget _glyph(ThemeData theme, IconData icon) => Padding(
     padding: const EdgeInsets.only(top: 16, bottom: 20),
     child: Align(
-      alignment: Alignment.centerLeft,
+      alignment: Alignment.center,
       child: Icon(icon, size: 56, color: theme.colorScheme.primary),
     ),
   );
@@ -343,8 +350,12 @@ class _VerificationState extends State<CredflareVerification> {
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
     final otherSteps =
-        (profile?['form_schema'] as List? ?? []).isNotEmpty ||
-        (profile?['verification_requirements'] as List? ?? []).isNotEmpty;
+        profile == null ||
+        (profile['form_schema'] as List? ?? []).isNotEmpty ||
+        (profile['verification_requirements'] as List? ?? []).any(
+          (item) => item['verification_type'] != 'facial_verification',
+        );
+    final selfie = _info != null && requiresSelfie(_info!);
     final requester = (_info?['requester'] as Map?)?['name'] as String?;
     final verifier = requester ?? 'your verifier';
     final message = _info?['custom_message'] as String?;
@@ -368,11 +379,11 @@ class _VerificationState extends State<CredflareVerification> {
     if (_info == null) {
       return [
         _glyph(theme, Icons.description_outlined),
-        _title(theme, 'Share your documents'),
+        _title(theme, 'Verify your identity'),
         const SizedBox(height: 8),
         _muted(
           theme,
-          'Choose a document, add each requested side, then review before sending.',
+          'Follow the steps requested by your verifier. Review each item before sending.',
         ),
         if (_error != null) _notice(theme),
         const SizedBox(height: 32),
@@ -384,16 +395,16 @@ class _VerificationState extends State<CredflareVerification> {
     }
     if (_pendingReceipt) {
       return [
-        _title(theme, 'Your document was sent'),
+        _title(theme, 'Your evidence was sent'),
         if (_error != null) _notice(theme),
         const SizedBox(height: 24),
         FilledButton(onPressed: _refresh, child: const Text('Check again')),
       ];
     }
-    if (docs.isEmpty && !otherSteps) {
+    if (docs.isEmpty && !selfie && !otherSteps) {
       return [
         _glyph(theme, Icons.inbox_outlined),
-        _title(theme, 'Documents received'),
+        _title(theme, 'Evidence received'),
         const SizedBox(height: 8),
         _muted(
           theme,
@@ -431,10 +442,23 @@ class _VerificationState extends State<CredflareVerification> {
         ),
       ];
     }
+    if (docs.isEmpty && selfie) {
+      return [
+        CredflareSelfieCapture(
+          session: _session!,
+          info: _info!,
+          onSubmitted: _refresh,
+          onBusyChanged: (busy) {
+            if (mounted) setState(() => _captureBusy = busy);
+          },
+          onDirtyChanged: (dirty) => _captureDirty = dirty,
+        ),
+      ];
+    }
     if (docs.isEmpty) {
       return [
         const SizedBox(height: 16),
-        _title(theme, 'Documents received'),
+        _title(theme, 'Evidence received'),
         const SizedBox(height: 8),
         _muted(
           theme,
@@ -484,47 +508,54 @@ class _VerificationState extends State<CredflareVerification> {
     final profile = _info?['profile'] as Map?;
     final allReceived =
         _info != null &&
+        profile != null &&
         !_pendingReceipt &&
-        (profile?['document_requirements'] as List? ?? []).isEmpty &&
-        (profile?['form_schema'] as List? ?? []).isEmpty &&
-        (profile?['verification_requirements'] as List? ?? []).isEmpty;
+        (profile['document_requirements'] as List? ?? []).isEmpty &&
+        (profile['form_schema'] as List? ?? []).isEmpty &&
+        (profile['verification_requirements'] as List? ?? []).isEmpty;
     final requester = _info?['requester'] as Map?;
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        titleSpacing: CredflareTheme.gutter,
-        title: CredflareVerifierBar(
-          name: requester?['name'] as String?,
-          logoUrl: requester?['logo_url'] as String?,
-          sandbox: _info?['environment'] == 'sandbox',
+    return PopScope(
+      canPop: allReceived,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) _leave();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          titleSpacing: CredflareTheme.gutter,
+          title: CredflareVerifierBar(
+            name: requester?['name'] as String?,
+            logoUrl: requester?['logo_url'] as String?,
+            sandbox: _info?['environment'] == 'sandbox',
+          ),
+          actions: [
+            TextButton(
+              onPressed: _loading || _captureBusy
+                  ? null
+                  : allReceived
+                  ? widget.onClose
+                  : _leave,
+              child: const Text('Close'),
+            ),
+            const SizedBox(width: 12),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: _loading || _captureBusy
-                ? null
-                : allReceived
-                ? widget.onClose
-                : _leave,
-            child: const Text('Close'),
-          ),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-            CredflareTheme.gutter,
-            8,
-            CredflareTheme.gutter,
-            CredflareTheme.gutter,
-          ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 600),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [..._body(theme), const CredflareSecuredBy()],
+        body: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(
+              CredflareTheme.gutter,
+              8,
+              CredflareTheme.gutter,
+              CredflareTheme.gutter,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 600),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [..._body(theme), const CredflareSecuredBy()],
+                ),
               ),
             ),
           ),

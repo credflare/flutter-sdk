@@ -5,7 +5,7 @@ Date: 2026-11-20. Host: macOS 26.3, Apple Silicon. Flutter 3.41.9, Dart 3.11.5, 
 | Check | Result |
 | --- | --- |
 | Static analysis | Passed |
-| HTTP client, capture-plan and contrast tests | 12 passed |
+| HTTP client, capture-plan, selfie requirements and contrast tests | 14 passed |
 | Automatic session handoff and guided camera-step widget test | Passed |
 | Android debug APK build | Passed |
 | iOS simulator build | Passed |

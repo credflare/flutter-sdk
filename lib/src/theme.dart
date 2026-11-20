@@ -202,12 +202,19 @@ class CredflareSecuredBy extends StatelessWidget {
     child: Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Image.asset(
-          'assets/credflare-mark.png',
-          package: 'credflare_sdk',
-          width: 14,
-          height: 14,
-          excludeFromSemantics: true,
+        Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Image.asset(
+            'assets/credflare-mark.png',
+            package: 'credflare_sdk',
+            width: 14,
+            height: 14,
+            excludeFromSemantics: true,
+          ),
         ),
         const SizedBox(width: 6),
         Text(

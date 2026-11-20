@@ -1,6 +1,6 @@
 # CredFlare Flutter SDK
 
-Development package for scoped applicant sessions and native document collection on Android and iOS. Requires the scoped-session backend changes. This package is not published.
+Development package for scoped applicant sessions and native document and selfie collection on Android and iOS. Requires the scoped-session backend changes. This package is not published.
 
 ```sh
 flutter pub get
@@ -48,7 +48,7 @@ Add `NSCameraUsageDescription` and `NSPhotoLibraryUsageDescription` to the iOS a
 
 Use `CredflareVerification(sessionProvider: provider, onClose: close)` for the guided document flow. The provider obtains a fresh session from your authenticated backend. The example calls the JavaScript demo backend on localhost port 3107 when Start is pressed; no session entry or pasting is needed. Never paste or embed client credentials in a mobile app. For a local Android emulator API, use `adb reverse` to forward the API port and a loopback API URL.
 
-See [flow requirements](docs/SDK-FLOW.md). Guided forms and selfie steps, process recovery and physical-device capture tests remain required before release. Trusted-camera checks, liveness and deepfake detection are unavailable.
+See [flow requirements](docs/SDK-FLOW.md). Guided forms, process recovery and physical-device capture tests remain required before release. Trusted-camera checks, liveness and deepfake detection are unavailable.
 
 ## Capture choices
 
@@ -61,3 +61,11 @@ Run `sh validate.sh` for static analysis, client tests and the example flow test
 ## Upload test files
 
 Synthetic front and back PNGs are in the sibling JavaScript SDK at `test/fixtures/documents`. Android demo files are available under Downloads > Credflare-Samples. The iOS example enables local document sharing so files placed in its Documents directory appear in Files under On My iPhone. Use the Upload-Samples folder in either demo app. These are test documents, not real identity records.
+
+## Developer-configured facial collection
+
+Choose the compliance profile on your server when creating the case. The recipient does not choose a profile or verification mode. The SDK collects outstanding documents first, then opens the selfie step only when the case requests `facial_verification`. Selfie-only cases go directly to that step. Document alternatives and capture-source choices follow the server's requirement rules.
+
+The selfie step uses the front camera, provides a preview and retake action, and sends only after confirmation. Uploads use the scoped biometric endpoint; facial submissions reference the uploaded file ID. Retrying a send reuses its upload and submission keys. A receipt confirms collection for review, not a face match or liveness result.
+
+The backend currently reports liveness, trusted camera and deepfake detection as unavailable. Automated face matching and validated liveness processing are not implemented by this capture interface. Forms and location checks return control to the host app. Example apps obtain their requirements from the demo server without a recipient-facing profile selector.

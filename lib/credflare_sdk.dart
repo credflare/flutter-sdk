@@ -6,3 +6,5 @@ export 'src/session_controller.dart';
 export 'src/capture_plan.dart';
 export 'src/verification_flow.dart';
 export 'src/theme.dart';
+
+export 'src/selfie_capture.dart';
