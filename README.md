@@ -52,7 +52,7 @@ See [flow requirements](docs/SDK-FLOW.md). Guided forms, process recovery and ph
 
 ## Capture choices
 
-Each document has its own capture rule. An ID can require `snapshot` while a bank statement requires `upload` in the same profile. `either` lets the applicant choose a photo or file for each side. `snapshot_and_upload` separately requires both sources for the same document. These rules are separate from document groups that ask for all documents or a subset of alternatives.
+Each document has its own capture rule. An ID can require `snapshot` while a bank statement requires `upload` in the same profile. `snapshot_or_upload` lets the applicant choose a photo or file for each side. `snapshot_and_upload` separately requires both sources for the same document. These rules are separate from document groups that ask for all documents or a subset of alternatives.
 
 The guided screens show each required side, preview and replacement, a final review, and a collection receipt. Camera source is client-reported. It does not establish liveness or a trusted feed.
 

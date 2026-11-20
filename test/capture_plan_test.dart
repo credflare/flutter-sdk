@@ -27,18 +27,20 @@ void main() {
       ]);
     },
   );
-  test('either capture asks once for each side', () async {
+  test('snapshot_or_upload capture asks once for each side', () async {
     final fixture =
         jsonDecode(
-              await File('test/fixtures/capture-either.json').readAsString(),
+              await File(
+                'test/fixtures/capture-snapshot-or-upload.json',
+              ).readAsString(),
             )
             as Map;
     final requirement = Map<String, dynamic>.from(
       fixture['data']['profile']['document_requirements'][0] as Map,
     );
     expect(captureSteps(requirement).map((e) => e.id).toList(), [
-      'either:front',
-      'either:back',
+      'camera_or_upload:front',
+      'camera_or_upload:back',
     ]);
   });
   Future<Map<String, dynamic>> fixture(String name) async {
@@ -62,17 +64,29 @@ void main() {
   test(
     'a requirement without capture_method follows its document type',
     () async {
-      final requirement = await fixture('test/fixtures/capture-either.json')
-        ..remove('capture_method');
-      expect(capturePolicy(requirement), 'either');
+      final requirement =
+          await fixture('test/fixtures/capture-snapshot-or-upload.json')
+            ..remove('capture_method');
+      expect(capturePolicy(requirement), 'snapshot_or_upload');
       expect(methodSummary(requirement), 'Photo or file');
     },
   );
+  test('a stored either method reads as snapshot_or_upload', () async {
+    final requirement =
+        await fixture('test/fixtures/capture-snapshot-or-upload.json')
+          ..['capture_method'] = 'either';
+    expect(capturePolicy(requirement), 'snapshot_or_upload');
+    expect(captureSteps(requirement).map((e) => e.id).toList(), [
+      'camera_or_upload:front',
+      'camera_or_upload:back',
+    ]);
+  });
   test(
     'an unsupported method is reported instead of producing steps',
     () async {
-      final requirement = await fixture('test/fixtures/capture-either.json')
-        ..['capture_method'] = 'camera_only';
+      final requirement =
+          await fixture('test/fixtures/capture-snapshot-or-upload.json')
+            ..['capture_method'] = 'camera_only';
       expect(isCaptureSupported(requirement), isFalse);
       expect(methodSummary(requirement), 'Not available in this app');
       expect(() => captureSteps(requirement), throwsUnsupportedError);

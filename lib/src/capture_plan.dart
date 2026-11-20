@@ -1,4 +1,9 @@
-const _supported = ['upload', 'either', 'snapshot', 'snapshot_and_upload'];
+const _supported = [
+  'upload',
+  'snapshot_or_upload',
+  'snapshot',
+  'snapshot_and_upload',
+];
 
 class CaptureStep {
   final String source;
@@ -15,8 +20,12 @@ class CaptureStep {
 
 String capturePolicy(Map<String, dynamic> requirement) {
   final document = requirement['document_type'] as Map;
-  return requirement['capture_method'] as String? ??
-      (document['capture_method'] == 'camera' ? 'either' : 'upload');
+  final method =
+      requirement['capture_method'] as String? ??
+      (document['capture_method'] == 'camera'
+          ? 'snapshot_or_upload'
+          : 'upload');
+  return method == 'either' ? 'snapshot_or_upload' : method;
 }
 
 bool isCaptureSupported(Map<String, dynamic> requirement) =>
@@ -26,7 +35,7 @@ String methodSummary(Map<String, dynamic> requirement) =>
     switch (capturePolicy(requirement)) {
       'snapshot' => 'Camera photos',
       'upload' => 'Saved files',
-      'either' => 'Photo or file',
+      'snapshot_or_upload' => 'Photo or file',
       'snapshot_and_upload' => 'Photo and saved file',
       _ => 'Not available in this app',
     };
@@ -45,8 +54,8 @@ List<CaptureStep> captureSteps(Map<String, dynamic> requirement) {
       : [
           method == 'snapshot'
               ? 'camera'
-              : method == 'either'
-              ? 'either'
+              : method == 'snapshot_or_upload'
+              ? 'camera_or_upload'
               : 'upload',
         ];
   return [

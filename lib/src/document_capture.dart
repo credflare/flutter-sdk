@@ -279,7 +279,7 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
     if (step.source == 'camera') {
       return 'Place the document on a flat surface. Keep all four corners visible and avoid reflections.';
     }
-    if (step.source == 'either') {
+    if (step.source == 'camera_or_upload') {
       return 'Take a photo or choose a saved file of the ${step.side}.';
     }
     final kind = widget.allowedFileTypes.contains('pdf')
@@ -381,7 +381,7 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
                   selected.source == 'camera' ? 'Retake photo' : 'Change file',
                 ),
               ),
-              if (step.source == 'either')
+              if (step.source == 'camera_or_upload')
                 TextButton(
                   onPressed: _busy
                       ? null
@@ -415,13 +415,13 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
               onPressed: _busy ? null : () => _pick(step, 'camera'),
               child: const Text('Take photo'),
             ),
-          if (step.source == 'either') const SizedBox(height: 12),
+          if (step.source == 'camera_or_upload') const SizedBox(height: 12),
           if (step.source == 'upload')
             FilledButton(
               onPressed: _busy ? null : () => _pick(step, 'upload'),
               child: const Text('Choose a file'),
             ),
-          if (step.source == 'either')
+          if (step.source == 'camera_or_upload')
             OutlinedButton(
               onPressed: _busy ? null : () => _pick(step, 'upload'),
               child: const Text('Choose a file'),
