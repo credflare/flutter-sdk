@@ -26,14 +26,17 @@ class _ExampleState extends State<Example> {
   static const modes = {
     'either': [
       'Photos or files',
-      'Choose either method for each requested side.',
+      'Profile allows a photo or a saved file for each side.',
     ],
     'snapshot_and_upload': [
       'Photos and files',
-      'Take each side with the camera, then upload each saved side.',
+      'Profile requires a photo and a saved file of each side.',
     ],
-    'snapshot': ['Camera photos', 'Take each requested side with the camera.'],
-    'upload': ['File uploads', 'Choose saved document images or PDFs.'],
+    'snapshot': [
+      'Camera photos',
+      'Profile requires a camera photo of each side.',
+    ],
+    'upload': ['File uploads', 'Profile requires saved images or PDFs.'],
   };
   Future<SessionDescriptor> _session() async {
     final url = Uri.parse('http://localhost:3107/session');
@@ -84,7 +87,7 @@ class _ExampleState extends State<Example> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Choose a sample flow. A fresh sandbox session is created when you start.',
+                'Choose a sample profile. Each profile sets its own capture method, and the SDK follows whatever the case asks for. A fresh sandbox case is created when you start.',
                 style: theme.textTheme.bodyLarge?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
