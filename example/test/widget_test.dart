@@ -1,19 +1,20 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:credflare_example/main.dart';
+import '../../test/support/fixtures.dart';
 
 void main() {
   testWidgets(
     'starts the selected flow without pasting or keeping a session field',
     (tester) async {
-      final raw = File(
-        '../test/fixtures/capture-snapshot_and_upload.json',
-      ).readAsStringSync();
-      final info = jsonDecode(raw) as Map<String, dynamic>;
+      final info = captureSession(
+        'snapshot_and_upload',
+        root: '../test/fixtures',
+      );
+      final raw = jsonEncode(info);
       String? chosenMode;
       var handoffs = 0;
       final client = MockClient((request) async {

@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import '../test/support/fixtures.dart';
 
 Future<void> _loadFonts() async {
   final ubuntu = FontLoader('packages/credflare_sdk/Ubuntu');
@@ -31,13 +32,7 @@ Future<void> _loadFonts() async {
 }
 
 Map<String, dynamic> _session({required bool received}) {
-  final raw =
-      jsonDecode(
-            File(
-              'test/fixtures/capture-snapshot_and_upload.json',
-            ).readAsStringSync(),
-          )
-          as Map<String, dynamic>;
+  final raw = captureSession('snapshot_and_upload');
   final data = raw['data'] as Map<String, dynamic>;
   data['requester'] = {'name': 'Example Lending', 'logo_url': null};
   data['custom_message'] =

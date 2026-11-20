@@ -9,22 +9,47 @@ void main() {
   late CredflareSession client;
   final calls = <HttpRequest>[];
   final bodies = <String>[];
+  var rejectLocation = false;
   setUp(() async {
+    rejectLocation = false;
     calls.clear();
     bodies.clear();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     server.listen((request) async {
       calls.add(request);
-      final name = request.uri.path.endsWith('/submit')
-          ? 'submission'
-          : request.uri.path.contains('/uploads/')
-          ? 'upload'
-          : request.headers.value('authorization') == 'Bearer wrong'
+      final body = await utf8.decoder.bind(request).join();
+      bodies.add(body);
+      final path = request.uri.path;
+      String field(String name) =>
+          RegExp('name="$name"\r\n\r\n([^\r]*)\r\n').firstMatch(body)?[1] ??
+          '';
+      final submitted = path.endsWith('/submit')
+          ? (jsonDecode(body) as Map)['type']
+          : null;
+      final name = request.headers.value('authorization') == 'Bearer wrong'
           ? 'unauthorized'
+          : path.endsWith('/liveness-challenges')
+          ? 'liveness-challenge'
+          : path.endsWith('/uploads/biometrics')
+          ? switch (field('type')) {
+              'gesture' => 'gesture-upload',
+              'liveness_video' => 'video-upload',
+              'selfie' => 'selfie-upload',
+              _ => 'facial-upload',
+            }
+          : path.contains('/uploads/')
+          ? 'upload'
+          : submitted == 'facial_verification'
+          ? 'facial-submission'
+          : submitted == 'location_verification'
+          ? (rejectLocation ? 'location-rejection' : 'location-submission')
+          : path.endsWith('/submit')
+          ? 'submission'
           : 'session';
-      bodies.add(await utf8.decoder.bind(request).join());
       request.response.statusCode = name == 'unauthorized'
           ? 401
+          : name == 'location-rejection'
+          ? 422
           : name == 'session'
           ? 200
           : 201;
@@ -75,22 +100,202 @@ void main() {
     expect(bodies.first, contains('name="document_type_id"\r\n\r\n7\r\n'));
     expect(bodies.first, contains('name="capture_source"\r\n\r\ncamera\r\n'));
   });
-  test('sends selfies through biometric uploads with camera source', () async {
-    final uploaded = await client.upload(
-      bytes: [1, 2, 3],
-      filename: 'selfie.jpg',
-      key: requestKey(),
-      type: 'biometrics',
-      source: 'camera',
+  String field(String body, String name) =>
+      RegExp('name="$name"\r\n\r\n([^\r]*)\r\n').firstMatch(body)?[1] ??
+      '<missing>';
+
+  test('requests a liveness challenge for the session', () async {
+    final challenge = await client.createLivenessChallenge();
+    final fixture = jsonDecode(
+      File('test/fixtures/liveness-challenge.json').readAsStringSync(),
+    )['data'];
+    expect(calls.single.method, 'POST');
+    expect(
+      calls.single.uri.path,
+      '/api/v1/sdk/sessions/00000000-0000-4000-8000-000000000001/liveness-challenges',
     );
-    await client.submit({
-      'type': 'facial_verification',
-      'image_file_id': uploaded['id'],
-    }, key: requestKey());
-    expect(calls.first.uri.path, endsWith('/uploads/biometrics'));
-    expect(bodies.first, contains('name="capture_source"\r\n\r\ncamera\r\n'));
-    expect(bodies.first, isNot(contains('document_type_id')));
-    expect(jsonDecode(bodies.last)['type'], 'facial_verification');
+    expect(
+      calls.single.headers.value('authorization'),
+      'Bearer test-session-token',
+    );
+    expect(challenge.id, fixture['challenge_id']);
+    expect(challenge.gestures, ['blink', 'smile', 'turn_right']);
+    expect(challenge.recordVideo, isTrue);
+    expect(challenge.maxVideoSeconds, 8);
+    expect(challenge.expiresAt, DateTime.parse(fixture['expires_at']));
+  });
+
+  test('uploads gesture, video and selfie evidence for a challenge', () async {
+    final keys = [requestKey(), requestKey(), requestKey()];
+    final gesture = await client.uploadBiometric(
+      bytes: [1, 2, 3],
+      filename: 'turn_right.jpg',
+      key: keys[0],
+      type: BiometricUploadType.gesture,
+      challengeId: 'challenge-1',
+      gesture: 'turn_right',
+    );
+    final video = await client.uploadBiometric(
+      bytes: [4, 5, 6],
+      filename: 'clip.mp4',
+      key: keys[1],
+      type: BiometricUploadType.livenessVideo,
+      challengeId: 'challenge-1',
+    );
+    final selfie = await client.uploadBiometric(
+      bytes: [7, 8, 9],
+      filename: 'selfie.jpg',
+      key: keys[2],
+      type: BiometricUploadType.selfie,
+      challengeId: 'challenge-1',
+    );
+    expect([gesture, video, selfie], [3, 5, 4]);
+    for (var i = 0; i < 3; i++) {
+      expect(calls[i].uri.path, endsWith('/uploads/biometrics'));
+      expect(calls[i].headers.contentType!.mimeType, 'multipart/form-data');
+      expect(calls[i].headers.value('x-idempotency-key'), keys[i]);
+      expect(field(bodies[i], 'challenge_id'), 'challenge-1');
+      expect(field(bodies[i], 'capture_source'), 'camera');
+      expect(bodies[i], isNot(contains('name="side"')));
+      expect(bodies[i], isNot(contains('document_type_id')));
+    }
+    expect(field(bodies[0], 'type'), 'gesture');
+    expect(field(bodies[0], 'gesture'), 'turn_right');
+    expect(bodies[0], contains('filename="turn_right.jpg"'));
+    expect(field(bodies[1], 'type'), 'liveness_video');
+    expect(bodies[1], isNot(contains('name="gesture"')));
+    expect(field(bodies[2], 'type'), 'selfie');
+    expect(
+      () => client.uploadBiometric(
+        bytes: [1],
+        filename: 'blink.jpg',
+        key: requestKey(),
+        type: BiometricUploadType.gesture,
+        challengeId: 'challenge-1',
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('submits a facial verification with challenge evidence', () async {
+    final key = requestKey();
+    final id = await client.submitFacial(
+      challengeId: 'challenge-1',
+      imageFileId: 4,
+      gestureFileIds: [1, 2, 3],
+      videoFileId: 5,
+      metadata: {
+        'provider': 'mlkit',
+        'liveness_results': [
+          {
+            'challenge': 'blink',
+            'completed': true,
+            'timestamp': '2026-11-20T23:04:00.000Z',
+          },
+        ],
+        'face_detection': {
+          'detected': true,
+          'face_count': 1,
+          'is_centered': true,
+          'is_correct_size': true,
+        },
+        'captured_at': '2026-11-20T23:04:05.000Z',
+      },
+      key: key,
+    );
+    expect(id, 1);
+    expect(calls.single.uri.path, endsWith('/submit'));
+    expect(calls.single.headers.value('x-idempotency-key'), key);
+    final body = jsonDecode(bodies.single) as Map;
+    expect(body['type'], 'facial_verification');
+    expect(body['challenge_id'], 'challenge-1');
+    expect(body['image_file_id'], 4);
+    expect(body['gesture_file_ids'], [1, 2, 3]);
+    expect(body['video_file_id'], 5);
+    expect(body['metadata']['provider'], 'mlkit');
+    expect(body['metadata']['face_detection']['face_count'], 1);
+  });
+
+  LocationFix fix() => LocationFix(
+    latitude: 4.0511,
+    longitude: 9.7679,
+    accuracy: 12.5,
+    fixTime: DateTime.utc(2026, 11, 20, 23, 4),
+    isMock: false,
+    provider: 'fused',
+    capturedAt: DateTime.utc(2026, 11, 20, 23, 4, 2),
+  );
+
+  test('submits a location fix with its metadata', () async {
+    final id = await client.submitLocation(fix(), key: requestKey());
+    expect(id, 2);
+    final body = jsonDecode(bodies.single) as Map;
+    expect(body, {
+      'type': 'location_verification',
+      'latitude': 4.0511,
+      'longitude': 9.7679,
+      'metadata': {
+        'accuracy': 12.5,
+        'altitude': null,
+        'fix_time': '2026-11-20T23:04:00.000Z',
+        'is_mock': false,
+        'provider': 'fused',
+        'captured_at': '2026-11-20T23:04:02.000Z',
+      },
+    });
+  });
+
+  test('surfaces a rejected location as a validation error', () async {
+    rejectLocation = true;
+    final message = jsonDecode(
+      File('test/fixtures/location-rejection.json').readAsStringSync(),
+    )['message'];
+    await expectLater(
+      client.submitLocation(fix(), key: requestKey()),
+      throwsA(
+        isA<CredflareException>()
+            .having((e) => e.status, 'status', 422)
+            .having((e) => e.type, 'type', 'validation')
+            .having((e) => e.message, 'message', message),
+      ),
+    );
+  });
+
+  test('reads facial and location settings with reference labels', () {
+    final info =
+        jsonDecode(
+              File('test/fixtures/capture-session.json').readAsStringSync(),
+            )['data']
+            as Map<String, dynamic>;
+    final requirements = verificationRequirements(info);
+    expect(requirements.map((e) => e.type), [
+      'facial_verification',
+      'location_verification',
+    ]);
+    final facial = requirements.first.facial;
+    expect(facial.gestureCount, 3);
+    expect(facial.recordVideo, isTrue);
+    expect(facial.gestures, contains('nod'));
+    final location = requirements.last.location;
+    expect(location.maxAccuracyM, 50);
+    expect(location.maxAgeS, 60);
+    expect(location.mockLocation, 'reject');
+    expect(location.reference!.rule, 'within');
+    expect(location.reference!.labels, ['Head office']);
+  });
+
+  test('fills missing requirement settings from the spec defaults', () {
+    final info =
+        jsonDecode(
+              File('test/fixtures/facial-session.json').readAsStringSync(),
+            )['data']
+            as Map<String, dynamic>;
+    final facial = verificationRequirements(info).single.facial;
+    expect(facial.gestureCount, SpecSettings.facialVerificationGestureCountDefault);
+    expect(facial.recordVideo, SpecSettings.facialVerificationRecordVideoDefault);
+    final location = LocationRequirementSettings.fromJson(null);
+    expect(location.maxAccuracyM, 100);
+    expect(location.reference, isNull);
   });
   test('rejects remote HTTP API destinations', () {
     expect(

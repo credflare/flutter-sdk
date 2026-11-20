@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Check generated spec and fixtures
+        run: |
+          git clone --depth 1 https://github.com/credflare/sdk-spec.git ../sdk-spec
+          sh scripts/check-spec.sh
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.41.9'

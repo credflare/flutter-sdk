@@ -68,8 +68,13 @@ class CredflareSession {
     descriptor = next;
   }
 
-  Future<dynamic> _send(http.BaseRequest request, {String? key}) async {
+  Future<dynamic> _send(
+    http.BaseRequest request, {
+    String? key,
+    bool keyed = true,
+  }) async {
     if (request.method == 'POST' &&
+        keyed &&
         !RegExp(
           r'^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$',
         ).hasMatch(key ?? '')) {
@@ -166,6 +171,56 @@ class CredflareSession {
     return result['id'] as int;
   }
 
+  Future<LivenessChallenge> createLivenessChallenge() async {
+    final data = await _send(
+      http.Request('POST', _url('/liveness-challenges')),
+      keyed: false,
+    );
+    return LivenessChallenge.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<int> uploadBiometric({
+    required List<int> bytes,
+    required String filename,
+    required String key,
+    required BiometricUploadType type,
+    required String challengeId,
+    String? gesture,
+  }) async {
+    if ((type == BiometricUploadType.gesture) != (gesture != null)) {
+      throw ArgumentError('A gesture name is required for gesture frames only.');
+    }
+    final request = http.MultipartRequest('POST', _url('/uploads/biometrics'))
+      ..fields['type'] = type.value
+      ..fields['challenge_id'] = challengeId
+      ..fields['capture_source'] = 'camera';
+    if (gesture != null) request.fields['gesture'] = gesture;
+    request.files.add(
+      http.MultipartFile.fromBytes('file', bytes, filename: filename),
+    );
+    final data = await _send(request, key: key) as Map;
+    return data['id'] as int;
+  }
+
+  Future<int> submitFacial({
+    required String challengeId,
+    required int imageFileId,
+    required List<int> gestureFileIds,
+    int? videoFileId,
+    required Map<String, dynamic> metadata,
+    required String key,
+  }) => submit({
+    'type': 'facial_verification',
+    'challenge_id': challengeId,
+    'image_file_id': imageFileId,
+    'gesture_file_ids': gestureFileIds,
+    'video_file_id': ?videoFileId,
+    'metadata': metadata,
+  }, key: key);
+
+  Future<int> submitLocation(LocationFix fix, {required String key}) =>
+      submit(fix.toSubmission(), key: key);
+
   Future<void> cancel() async {
     await _send(http.Request('DELETE', _url()));
   }
@@ -173,4 +228,72 @@ class CredflareSession {
   void close() {
     if (_ownsClient) _http.close();
   }
+}
+
+enum BiometricUploadType {
+  gesture('gesture'),
+  livenessVideo('liveness_video'),
+  selfie('selfie');
+
+  final String value;
+  const BiometricUploadType(this.value);
+}
+
+class LivenessChallenge {
+  final String id;
+  final List<String> gestures;
+  final DateTime expiresAt;
+  final bool recordVideo;
+  final int maxVideoSeconds;
+  const LivenessChallenge({
+    required this.id,
+    required this.gestures,
+    required this.expiresAt,
+    required this.recordVideo,
+    required this.maxVideoSeconds,
+  });
+
+  factory LivenessChallenge.fromJson(Map<String, dynamic> json) =>
+      LivenessChallenge(
+        id: json['challenge_id'] as String,
+        gestures: (json['gestures'] as List).cast<String>(),
+        expiresAt: DateTime.parse(json['expires_at'] as String),
+        recordVideo: json['record_video'] as bool? ?? false,
+        maxVideoSeconds: (json['max_video_seconds'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class LocationFix {
+  final double latitude;
+  final double longitude;
+  final double? accuracy;
+  final double? altitude;
+  final DateTime fixTime;
+  final bool? isMock;
+  final String provider;
+  final DateTime capturedAt;
+  const LocationFix({
+    required this.latitude,
+    required this.longitude,
+    required this.accuracy,
+    required this.fixTime,
+    required this.provider,
+    required this.capturedAt,
+    this.altitude,
+    this.isMock,
+  });
+
+  Map<String, dynamic> toSubmission() => {
+    'type': 'location_verification',
+    'latitude': latitude,
+    'longitude': longitude,
+    'metadata': {
+      'accuracy': accuracy,
+      'altitude': altitude,
+      'fix_time': fixTime.toUtc().toIso8601String(),
+      'is_mock': isMock,
+      'provider': provider,
+      'captured_at': capturedAt.toUtc().toIso8601String(),
+    },
+  };
 }
