@@ -270,6 +270,29 @@ void main() {
     expect(calls.single.headers.value('x-idempotency-key'), key);
   });
 
+  test('reads the code of every backend rejection fixture', () async {
+    for (final code in SpecErrorCode.meanings.keys) {
+      final envelope = jsonDecode(
+        File('test/fixtures/rejections/$code.json').readAsStringSync(),
+      );
+      final session = CredflareSession(
+        client.descriptor,
+        client: MockClient(
+          (_) async => http.Response(jsonEncode(envelope), 422),
+        ),
+      );
+      await expectLater(
+        session.submitLocation(fix(), key: requestKey()),
+        throwsA(
+          isA<CredflareException>()
+              .having((e) => e.code, 'code', code)
+              .having((e) => e.hasKnownCode, 'hasKnownCode', isTrue)
+              .having((e) => e.message, 'message', envelope['message']),
+        ),
+      );
+    }
+  });
+
   test('keeps unknown rejection codes and tolerates missing ones', () async {
     Future<CredflareException> reject(Map<String, dynamic> envelope) async {
       final session = CredflareSession(

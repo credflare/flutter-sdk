@@ -355,9 +355,9 @@ void main() {
   testWidgets('an expired challenge on submit starts over with a new one', (
     tester,
   ) async {
-    final rejection = fixture('reference-rejection')
-      ..['message'] = 'The liveness challenge has expired.'
-      ..['code'] = SpecErrorCode.livenessChallengeExpired;
+    final rejection = fixture(
+      'rejections/${SpecErrorCode.livenessChallengeExpired}',
+    );
     final backend = Backend()
       ..facialRejection = rejection
       ..sessions.add(withRequirements(['facial_verification']));
@@ -413,12 +413,16 @@ void main() {
         SpecCopyKey.locationPlaceNotMatchedWithin,
         {'place': 'Head office'},
       ),
-      'location.future_rule': 'A rule the SDK does not know yet.',
     };
+    expect(
+      cases.keys.toSet(),
+      SpecErrorCode.meanings.keys
+          .where((c) => c.startsWith('location.'))
+          .toSet(),
+    );
     for (final entry in cases.entries) {
-      final rejection = fixture('location-rejection')
-        ..['code'] = entry.key
-        ..['message'] = 'A rule the SDK does not know yet.';
+      final rejection = fixture('rejections/${entry.key}');
+      expect(rejection['code'], entry.key);
       final backend = Backend()
         ..locationRejection = rejection
         ..sessions.add(withRequirements(['location_verification']));
@@ -440,6 +444,7 @@ void main() {
       await tapText(tester, copy(SpecCopyKey.locationSend));
       await tester.pumpAndSettle();
       expect(find.text(entry.value), findsOneWidget, reason: entry.key);
+      expect(find.text(rejection['message'] as String), findsNothing);
       expect(find.text(copy(SpecCopyKey.locationRetry)), findsOneWidget);
     }
   });
@@ -454,9 +459,7 @@ void main() {
       SpecErrorCode.livenessFrameOutOfWindow,
     ]) {
       final backend = Backend()
-        ..facialRejection = (fixture('reference-rejection')
-          ..['code'] = code
-          ..['message'] = 'Server wording')
+        ..facialRejection = fixture('rejections/$code')
         ..sessions.add(withRequirements(['facial_verification']));
       final sources = <FakeLivenessSource>[];
       await tester.pumpWidget(const SizedBox());
@@ -470,6 +473,10 @@ void main() {
         findsOneWidget,
         reason: code,
       );
+      expect(
+        find.text(fixture('rejections/$code')['message'] as String),
+        findsNothing,
+      );
       await tapText(tester, copy(SpecCopyKey.livenessRetry));
       await tester.pump();
       await tester.pump();
@@ -482,9 +489,9 @@ void main() {
     tester,
   ) async {
     final backend = Backend()
-      ..facialRejection = (fixture('reference-rejection')
-        ..['code'] = SpecErrorCode.livenessVideoTooLong
-        ..['message'] = 'The video is too long. Record it again.')
+      ..facialRejection = fixture(
+        'rejections/${SpecErrorCode.livenessVideoTooLong}',
+      )
       ..sessions.add(withRequirements(['facial_verification']));
     final sources = <FakeLivenessSource>[];
     await tester.pumpWidget(facialApp(backend, sources));
@@ -493,7 +500,10 @@ void main() {
     await tapText(tester, copy(SpecCopyKey.selfieSend));
     await tester.pumpAndSettle();
     expect(
-      find.text('The video is too long. Record it again.'),
+      find.text(
+        fixture('rejections/${SpecErrorCode.livenessVideoTooLong}')['message']
+            as String,
+      ),
       findsOneWidget,
     );
     expect(find.text(copy(SpecCopyKey.livenessRetry)), findsOneWidget);
