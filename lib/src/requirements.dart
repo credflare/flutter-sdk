@@ -30,11 +30,17 @@ class FacialSettings {
 
 class LocationReference {
   final String rule;
+  final String match;
   final List<String> labels;
-  const LocationReference({required this.rule, required this.labels});
+  const LocationReference({
+    required this.rule,
+    required this.labels,
+    this.match = 'any',
+  });
 
   factory LocationReference.fromJson(Map json) => LocationReference(
     rule: json['rule'] as String? ?? 'within',
+    match: json['match'] as String? ?? 'any',
     labels: [
       for (final place in json['places'] as List? ?? const [])
         if ((place as Map)['label'] is String) place['label'] as String,
@@ -71,7 +77,9 @@ class LocationRequirementSettings {
       ipCountry:
           json?['ip_country'] as String? ??
           SpecSettings.locationVerificationIpCountryDefault,
-      reference: reference is Map ? LocationReference.fromJson(reference) : null,
+      reference: reference is Map
+          ? LocationReference.fromJson(reference)
+          : null,
     );
   }
 }

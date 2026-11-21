@@ -57,13 +57,15 @@ class _ExampleState extends State<Example> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Verify your identity',
+                copy(SpecCopyKey.introTitle),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineLarge,
               ),
               const SizedBox(height: 16),
               Text(
-                'Follow the steps requested by your verifier. Review your documents and selfie before sending.',
+                copy(SpecCopyKey.introBody, {
+                  'verifier': copy(SpecCopyKey.commonVerifierFallback),
+                }),
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyLarge,
               ),
@@ -73,7 +75,10 @@ class _ExampleState extends State<Example> {
                 child: const Text('Start verification'),
               ),
               const SizedBox(height: 16),
-              const Text('Sandbox demo. The server sets the requirements.'),
+              const Text(
+                'Sandbox demo. The server sets the requirements.',
+                textAlign: TextAlign.center,
+              ),
               const CredflareSecuredBy(),
             ],
           ),

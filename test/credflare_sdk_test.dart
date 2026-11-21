@@ -21,8 +21,7 @@ void main() {
       bodies.add(body);
       final path = request.uri.path;
       String field(String name) =>
-          RegExp('name="$name"\r\n\r\n([^\r]*)\r\n').firstMatch(body)?[1] ??
-          '';
+          RegExp('name="$name"\r\n\r\n([^\r]*)\r\n').firstMatch(body)?[1] ?? '';
       final submitted = path.endsWith('/submit')
           ? (jsonDecode(body) as Map)['type']
           : null;
@@ -282,6 +281,17 @@ void main() {
     expect(location.mockLocation, 'reject');
     expect(location.reference!.rule, 'within');
     expect(location.reference!.labels, ['Head office']);
+    expect(location.reference!.match, 'any');
+    final all = LocationReference.fromJson({
+      'rule': 'outside',
+      'match': 'all',
+      'places': [
+        {'label': 'Depot'},
+        {'label': 'Port'},
+      ],
+    });
+    expect(all.match, 'all');
+    expect(all.labels, ['Depot', 'Port']);
   });
 
   test('fills missing requirement settings from the spec defaults', () {
@@ -291,8 +301,14 @@ void main() {
             )['data']
             as Map<String, dynamic>;
     final facial = verificationRequirements(info).single.facial;
-    expect(facial.gestureCount, SpecSettings.facialVerificationGestureCountDefault);
-    expect(facial.recordVideo, SpecSettings.facialVerificationRecordVideoDefault);
+    expect(
+      facial.gestureCount,
+      SpecSettings.facialVerificationGestureCountDefault,
+    );
+    expect(
+      facial.recordVideo,
+      SpecSettings.facialVerificationRecordVideoDefault,
+    );
     final location = LocationRequirementSettings.fromJson(null);
     expect(location.maxAccuracyM, 100);
     expect(location.reference, isNull);

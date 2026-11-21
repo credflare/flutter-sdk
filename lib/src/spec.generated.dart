@@ -1,9 +1,9 @@
 // GENERATED FILE, DO NOT EDIT.
-// Source: credflare sdk-spec 1.0.0 (4cd1169538d1). Regenerate with scripts/generate.mjs.
+// Source: credflare sdk-spec 1.0.0 (3f923c2940de). Regenerate with scripts/generate.mjs.
 // ignore_for_file: type=lint
 
 const String credflareSpecVersion = '1.0.0';
-const String credflareSpecHash = '4cd1169538d1';
+const String credflareSpecHash = '3f923c2940de';
 
 /// One step of a gesture. value and holdFrames name a threshold key.
 final class SpecGestureStep {
@@ -556,6 +556,7 @@ abstract final class SpecCopy {
     'location.place.need_within_all': 'You need to be at each of these places: {places}.',
     'location.place.need_outside': 'You need to be away from {place}.',
     'location.place.need_outside_all': 'You need to be away from these places: {places}.',
+    'location.place.need_outside_any': 'You need to be away from at least one of these places: {places}.',
     'location.place.not_matched_within': 'You do not seem to be at {place} yet. Move closer, then try again.',
     'location.place.not_matched_outside': 'You seem to be too close to {place}. Move away, then try again.',
     'location.place.not_precise': 'Your location is not precise enough to check this place. Move near a window or outside, then try again.',
@@ -736,6 +737,7 @@ abstract final class SpecCopyKey {
   static const String locationPlaceNeedWithinAll = 'location.place.need_within_all';
   static const String locationPlaceNeedOutside = 'location.place.need_outside';
   static const String locationPlaceNeedOutsideAll = 'location.place.need_outside_all';
+  static const String locationPlaceNeedOutsideAny = 'location.place.need_outside_any';
   static const String locationPlaceNotMatchedWithin = 'location.place.not_matched_within';
   static const String locationPlaceNotMatchedOutside = 'location.place.not_matched_outside';
   static const String locationPlaceNotPrecise = 'location.place.not_precise';

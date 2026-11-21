@@ -188,7 +188,9 @@ class CredflareSession {
     String? gesture,
   }) async {
     if ((type == BiometricUploadType.gesture) != (gesture != null)) {
-      throw ArgumentError('A gesture name is required for gesture frames only.');
+      throw ArgumentError(
+        'A gesture name is required for gesture frames only.',
+      );
     }
     final request = http.MultipartRequest('POST', _url('/uploads/biometrics'))
       ..fields['type'] = type.value
