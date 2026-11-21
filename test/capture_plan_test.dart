@@ -37,9 +37,7 @@ void main() {
       );
 
   test('steps carry side and source labels', () async {
-    final steps = captureSteps(
-      await load('snapshot_and_upload'),
-    );
+    final steps = captureSteps(await load('snapshot_and_upload'));
     expect(steps.map((e) => '${e.label} ${e.sourceLabel}').toList(), [
       'Front Camera photo',
       'Back Camera photo',
@@ -50,17 +48,15 @@ void main() {
   test(
     'a requirement without capture_method follows its document type',
     () async {
-      final requirement =
-          await load('snapshot_or_upload')
-            ..remove('capture_method');
+      final requirement = await load('snapshot_or_upload')
+        ..remove('capture_method');
       expect(capturePolicy(requirement), 'snapshot_or_upload');
       expect(methodSummary(requirement), 'Photo or file');
     },
   );
   test('a stored either method reads as snapshot_or_upload', () async {
-    final requirement =
-        await load('snapshot_or_upload')
-          ..['capture_method'] = 'either';
+    final requirement = await load('snapshot_or_upload')
+      ..['capture_method'] = 'either';
     expect(capturePolicy(requirement), 'snapshot_or_upload');
     expect(captureSteps(requirement).map((e) => e.id).toList(), [
       'camera_or_upload:front',
@@ -70,11 +66,13 @@ void main() {
   test(
     'an unsupported method is reported instead of producing steps',
     () async {
-      final requirement =
-          await load('snapshot_or_upload')
-            ..['capture_method'] = 'camera_only';
+      final requirement = await load('snapshot_or_upload')
+        ..['capture_method'] = 'camera_only';
       expect(isCaptureSupported(requirement), isFalse);
-      expect(methodSummary(requirement), 'Not available in this app');
+      expect(
+        methodSummary(requirement),
+        'Not available in this app. Contact your verifier.',
+      );
       expect(() => captureSteps(requirement), throwsUnsupportedError);
     },
   );

@@ -4,7 +4,11 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart' as files;
 import 'capture_plan.dart';
 import 'client.dart';
+import 'copy.dart';
+import 'spec.generated.dart';
+import 'spec_icon.dart';
 import 'theme.dart';
+import 'ui.dart';
 
 class CredflareDocumentCapture extends StatefulWidget {
   final CredflareSession session;
@@ -84,7 +88,7 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
         selected = await files.openFile(
           acceptedTypeGroups: [
             files.XTypeGroup(
-              label: 'Requested document',
+              label: copy(SpecCopyKey.capturePreviewDocument),
               extensions: types,
               mimeTypes: [
                 if (types.any(
@@ -113,14 +117,14 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
       if (!widget.allowedFileTypes.contains(
         extension == 'jpeg' ? 'jpg' : extension,
       )) {
-        throw StateError(
-          'Choose a ${widget.allowedFileTypes.join(', ').toUpperCase()} file.',
-        );
+        throw StateError(copy(SpecCopyKey.errorsFileType, {'types': _types}));
       }
       final length = await selected.length();
       if (length > widget.maxFileSizeBytes) {
         throw StateError(
-          'This file is larger than ${formatSize(widget.maxFileSizeBytes)}. Choose a smaller file.',
+          copy(SpecCopyKey.errorsFileTooLarge, {
+            'size': formatSize(widget.maxFileSizeBytes),
+          }),
         );
       }
       final bytes = await selected.readAsBytes();
@@ -139,11 +143,11 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
                       'camera_access_restricted',
                       'photo_access_denied',
                     ].contains(error.code)
-                    ? 'Camera or photo access is off. Turn it on in Settings, then try again.'
-                    : 'The camera or file picker is unavailable. Try again on another device.'
+                    ? copy(SpecCopyKey.errorsCameraDenied)
+                    : copy(SpecCopyKey.errorsCameraUnavailable)
               : error is StateError
               ? error.message
-              : 'Could not add this file. Try again.';
+              : copy(SpecCopyKey.errorsAddFileFailed);
         });
       }
     } finally {
@@ -175,8 +179,11 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
           done++;
           setState(() {
             _sending = pending > 1
-                ? 'Uploading $done of $pending'
-                : 'Uploading';
+                ? copy(SpecCopyKey.sendingUploadingProgress, {
+                    'current': done,
+                    'total': pending,
+                  })
+                : copy(SpecCopyKey.sendingUploading);
           });
           file.fileId =
               (await widget.session.upload(
@@ -196,7 +203,7 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
         });
       }
       setState(() {
-        _sending = 'Sending';
+        _sending = copy(SpecCopyKey.sendingSending);
       });
       final id = await widget.session.submit({
         'type': 'document_verification',
@@ -209,7 +216,7 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
         setState(() {
           _error = error is CredflareException && error.status != 0
               ? error.message
-              : 'Could not send this document. Check your connection and try again.';
+              : copy(SpecCopyKey.errorsSendDocumentFailed);
         });
       }
     } finally {
@@ -236,13 +243,15 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
           ? Image.memory(
               file.bytes,
               fit: BoxFit.contain,
-              semanticLabel: '$label preview',
+              semanticLabel: copy(SpecCopyKey.capturePreviewLabel, {
+                'side': label.toLowerCase(),
+              }),
             )
           : Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.description_outlined,
+                CredflareIcon(
+                  SpecIcons.document,
                   size: 40,
                   color: colors.primary,
                 ),
@@ -260,35 +269,32 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
     );
   }
 
-  Widget _notice(ThemeData theme) => Padding(
-    padding: const EdgeInsets.only(top: 16),
-    child: Semantics(
-      liveRegion: true,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          border: Border.all(color: theme.colorScheme.error),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
-      ),
-    ),
-  );
+  Widget _notice(ThemeData theme) => CredflareNotice(_error!);
+
+  String get _types => widget.allowedFileTypes.join(', ').toUpperCase();
 
   String _instruction(List<CaptureStep> steps, CaptureStep step) {
+    final side = step.label.toLowerCase();
     if (step.source == 'camera') {
-      return 'Place the document on a flat surface. Keep all four corners visible and avoid reflections.';
+      return copy(SpecCopyKey.captureInstructionCamera, {
+        'document': _document['name'],
+      });
     }
     if (step.source == 'camera_or_upload') {
-      return 'Take a photo or choose a saved file of the ${step.side}.';
+      return copy(SpecCopyKey.captureInstructionEither, {'side': side});
     }
-    final kind = widget.allowedFileTypes.contains('pdf')
-        ? 'photo, scan or PDF'
-        : 'photo or scan';
+    final text = copy(
+      widget.allowedFileTypes.contains('pdf')
+          ? SpecCopyKey.captureInstructionUploadPdf
+          : SpecCopyKey.captureInstructionUpload,
+      {'side': side},
+    );
     final firstUpload =
         capturePolicy(widget.requirement) == 'snapshot_and_upload' &&
         steps.indexWhere((item) => item.source == 'upload') == _index;
-    return 'Choose a clear $kind of the ${step.side}.${firstUpload ? ' ${widget.requesterName ?? 'Your verifier'} also needs a saved file of each side.' : ''}';
+    return firstUpload
+        ? '$text ${copy(SpecCopyKey.captureAlsoSavedFile)}'
+        : text;
   }
 
   @override
@@ -299,8 +305,11 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
     try {
       steps = _steps;
     } on UnsupportedError {
-      return Text(
-        'This document cannot be collected in this app. Contact ${widget.requesterName ?? 'your verifier'}.',
+      return CredflareBody(
+        copy(SpecCopyKey.errorsDocumentUnsupported, {
+          'verifier':
+              widget.requesterName ?? copy(SpecCopyKey.commonVerifierFallback),
+        }),
       );
     }
     final total = steps.length + 1;
@@ -314,6 +323,7 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
       children: [
         Text(
           _document['name'] as String,
+          textAlign: TextAlign.center,
           style: theme.textTheme.bodySmall?.copyWith(
             color: muted,
             fontWeight: FontWeight.w500,
@@ -323,7 +333,8 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
         Semantics(
           header: true,
           child: Text(
-            reviewing ? 'Review before sending' : step!.label,
+            reviewing ? copy(SpecCopyKey.reviewTitle) : step!.label,
+            textAlign: TextAlign.center,
             style: theme.textTheme.headlineSmall,
           ),
         ),
@@ -331,12 +342,16 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
           const SizedBox(height: 2),
           Text(
             step!.sourceLabel,
+            textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(color: muted),
           ),
         ],
         const SizedBox(height: 16),
         Semantics(
-          label: 'Step $position of $total',
+          label: copy(SpecCopyKey.commonStepProgress, {
+            'current': position,
+            'total': total,
+          }),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
@@ -349,7 +364,11 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
         const SizedBox(height: 8),
         ExcludeSemantics(
           child: Text(
-            'Step $position of $total',
+            copy(SpecCopyKey.commonStepProgress, {
+              'current': position,
+              'total': total,
+            }),
+            textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(color: muted),
           ),
         ),
@@ -358,13 +377,15 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
           _preview(selected, step!.label),
           const SizedBox(height: 12),
           Text(
-            'Check that all four corners are visible, the text is sharp and there is no glare.',
+            copy(SpecCopyKey.captureCheckPhoto),
+            textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(color: muted),
           ),
           if (selected.source == 'upload') ...[
             const SizedBox(height: 4),
             Text(
               selected.name,
+              textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall?.copyWith(color: muted),
@@ -373,12 +394,17 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
           if (_error != null) _notice(theme),
           const SizedBox(height: 8),
           Wrap(
+            alignment: WrapAlignment.center,
             spacing: 8,
             children: [
               TextButton(
                 onPressed: _busy ? null : () => _pick(step, selected.source),
                 child: Text(
-                  selected.source == 'camera' ? 'Retake photo' : 'Change file',
+                  copy(
+                    selected.source == 'camera'
+                        ? SpecCopyKey.captureRetakePhoto
+                        : SpecCopyKey.captureChangeFile,
+                  ),
                 ),
               ),
               if (step.source == 'camera_or_upload')
@@ -390,9 +416,11 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
                           selected.source == 'camera' ? 'upload' : 'camera',
                         ),
                   child: Text(
-                    selected.source == 'camera'
-                        ? 'Use a file instead'
-                        : 'Take a photo instead',
+                    copy(
+                      selected.source == 'camera'
+                          ? SpecCopyKey.captureUseFileInstead
+                          : SpecCopyKey.captureUsePhotoInstead,
+                    ),
                   ),
                 ),
             ],
@@ -401,11 +429,17 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
           FilledButton(
             onPressed: _busy ? null : _next,
             child: Text(
-              _editing || _index + 1 == steps.length ? 'Review' : 'Continue',
+              _editing || _index + 1 == steps.length
+                  ? copy(SpecCopyKey.reviewTitle)
+                  : copy(SpecCopyKey.commonContinue),
             ),
           ),
         ] else if (!reviewing) ...[
-          Text(_instruction(steps, step!), style: theme.textTheme.bodyLarge),
+          Text(
+            _instruction(steps, step!),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge,
+          ),
           const SizedBox(height: 20),
           CredflareSideGuide(side: step.side),
           if (_error != null) _notice(theme),
@@ -413,53 +447,61 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
           if (step.source != 'upload')
             FilledButton(
               onPressed: _busy ? null : () => _pick(step, 'camera'),
-              child: const Text('Take photo'),
+              child: Text(copy(SpecCopyKey.captureTakePhoto)),
             ),
           if (step.source == 'camera_or_upload') const SizedBox(height: 12),
           if (step.source == 'upload')
             FilledButton(
               onPressed: _busy ? null : () => _pick(step, 'upload'),
-              child: const Text('Choose a file'),
+              child: Text(copy(SpecCopyKey.captureChooseFile)),
             ),
           if (step.source == 'camera_or_upload')
             OutlinedButton(
               onPressed: _busy ? null : () => _pick(step, 'upload'),
-              child: const Text('Choose a file'),
+              child: Text(copy(SpecCopyKey.captureChooseFile)),
             ),
           if (canUpload) ...[
             const SizedBox(height: 12),
             Text(
-              '${widget.allowedFileTypes.join(', ').toUpperCase()}, up to ${formatSize(widget.maxFileSizeBytes)}',
+              copy(SpecCopyKey.captureFileLimits, {
+                'types': _types,
+                'size': formatSize(widget.maxFileSizeBytes),
+              }),
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(color: muted),
             ),
           ],
         ] else ...[
           Text(
-            'Check each photo and file before you send them.',
+            copy(SpecCopyKey.reviewBody),
+            textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(color: muted),
           ),
           const SizedBox(height: 16),
           for (final entry in steps) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${entry.label} · ${_captures[entry.id]!.source == 'camera' ? 'Camera photo' : 'Saved file'}',
-                    style: theme.textTheme.titleMedium,
-                  ),
+            Text(
+              copy(SpecCopyKey.reviewItem, {
+                'side': entry.label,
+                'source': copy(
+                  _captures[entry.id]!.source == 'camera'
+                      ? SpecCopyKey.captureSourceCamera
+                      : SpecCopyKey.captureSourceUpload,
                 ),
-                TextButton(
-                  onPressed: _busy
-                      ? null
-                      : () => setState(() {
-                          _index = steps.indexOf(entry);
-                          _editing = true;
-                          _error = null;
-                        }),
-                  child: const Text('Change'),
-                ),
-              ],
+              }),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.titleMedium,
+            ),
+            Center(
+              child: TextButton(
+                onPressed: _busy
+                    ? null
+                    : () => setState(() {
+                        _index = steps.indexOf(entry);
+                        _editing = true;
+                        _error = null;
+                      }),
+                child: Text(copy(SpecCopyKey.reviewChange)),
+              ),
             ),
             _preview(_captures[entry.id]!, entry.label, height: 150),
             const SizedBox(height: 16),
@@ -470,7 +512,7 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
             Semantics(
               liveRegion: true,
               child: Text(
-                '$_sending…',
+                _sending!,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(color: muted),
               ),
@@ -491,10 +533,10 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      const Text('Send document'),
+                      Text(copy(SpecCopyKey.reviewSend)),
                     ],
                   )
-                : const Text('Send document'),
+                : Text(copy(SpecCopyKey.reviewSend)),
           ),
         ],
       ],

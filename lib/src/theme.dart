@@ -1,38 +1,37 @@
 import 'package:flutter/material.dart';
+import 'copy.dart';
+import 'spec.generated.dart';
 
 class CredflareTheme {
   static const gutter = 24.0;
   static const gap = 16.0;
   static const radius = 14.0;
   static const buttonHeight = 56.0;
-  static const light = {
-    'primary': Color(0xFF20315F),
-    'onPrimary': Color(0xFFFFFFFF),
-    'surface': Color(0xFFFFFFFF),
-    'ink': Color(0xFF18233C),
-    'muted': Color(0xFF52617A),
-    'soft': Color(0xFFF0F3FA),
-    'border': Color(0xFFCAD4E5),
-    'accent': Color(0xFFDC6E11),
-    'success': Color(0xFF126749),
-    'error': Color(0xFFAA2525),
-    'warningSoft': Color(0xFFFDF1E6),
-    'warningInk': Color(0xFF7A3B06),
+  static const maxContentWidth = 600.0;
+  static Map<String, Color> _palette(SpecPalette p) => {
+    'primary': Color(p.primary),
+    'onPrimary': Color(p.onPrimary),
+    'surface': Color(p.surface),
+    'ink': Color(p.ink),
+    'muted': Color(p.muted),
+    'soft': Color(p.soft),
+    'border': Color(p.border),
+    'accent': Color(p.accent),
+    'success': Color(p.success),
+    'error': Color(p.error),
+    'warningSoft': Color(p.warningSoft),
+    'warningInk': Color(p.warningInk),
   };
-  static const dark = {
-    'primary': Color(0xFFB9CDFF),
-    'onPrimary': Color(0xFF16294E),
-    'surface': Color(0xFF111C31),
-    'ink': Color(0xFFF4F7FE),
-    'muted': Color(0xFFB7C4DA),
-    'soft': Color(0xFF1A2942),
-    'border': Color(0xFF566983),
-    'accent': Color(0xFFFFB579),
-    'success': Color(0xFF8FE0B8),
-    'error': Color(0xFFFFB4AB),
-    'warningSoft': Color(0xFF3A2A1A),
-    'warningInk': Color(0xFFFFD3AE),
-  };
+  static final light = _palette(SpecTokens.light);
+  static final dark = _palette(SpecTokens.dark);
+  static Map<String, Color> of(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? dark : light;
+
+  static TextStyle _type(SpecTextStyle t) => TextStyle(
+    fontSize: t.size,
+    height: t.lineHeight / t.size,
+    fontWeight: FontWeight.values[(t.weight ~/ 100) - 1],
+  );
 
   static ThemeData data(Brightness brightness) {
     final p = brightness == Brightness.dark ? dark : light;
@@ -56,19 +55,14 @@ class CredflareTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: p['surface'],
       fontFamily: 'packages/credflare_sdk/Ubuntu',
-      textTheme: const TextTheme(
-        headlineSmall: TextStyle(
-          fontSize: 24,
-          height: 1.25,
-          fontWeight: FontWeight.w700,
-        ),
-        titleMedium: TextStyle(
-          fontSize: 17,
-          height: 1.4,
-          fontWeight: FontWeight.w500,
-        ),
-        bodyLarge: TextStyle(fontSize: 16, height: 1.5),
-        bodySmall: TextStyle(fontSize: 13, height: 1.45),
+      textTheme: TextTheme(
+        headlineSmall: _type(SpecTokens.typeTitle),
+        titleMedium: _type(SpecTokens.typeSubtitle),
+        bodyLarge: _type(SpecTokens.typeBody),
+        bodyMedium: _type(SpecTokens.typeLabel),
+        bodySmall: _type(SpecTokens.typeSmall),
+        labelLarge: _type(SpecTokens.typeButton),
+        labelSmall: _type(SpecTokens.typeChip),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: p['surface'],
@@ -180,7 +174,7 @@ class CredflareVerifierBar extends StatelessWidget {
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
-              'Test mode',
+              copy(SpecCopyKey.commonTestMode),
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -218,7 +212,7 @@ class CredflareSecuredBy extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         Text(
-          'Secured by Credflare',
+          copy(SpecCopyKey.commonSecuredBy),
           style: TextStyle(
             fontSize: 12,
             color: Theme.of(context).colorScheme.onSurfaceVariant,
