@@ -8,6 +8,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import '../test/support/backend.dart';
+import '../test/support/fakes.dart';
+import '../test/support/fixtures.dart';
+
+final gestures = (fixture('liveness-challenge')['data']['gestures'] as List)
+    .cast<String>();
 
 Future<void> _loadFonts() async {
   final ubuntu = FontLoader('packages/credflare_sdk/Ubuntu');
@@ -31,13 +37,7 @@ Future<void> _loadFonts() async {
 }
 
 Map<String, dynamic> _session({required bool received}) {
-  final raw =
-      jsonDecode(
-            File(
-              'test/fixtures/capture-snapshot_and_upload.json',
-            ).readAsStringSync(),
-          )
-          as Map<String, dynamic>;
+  final raw = captureSession('snapshot_and_upload');
   final data = raw['data'] as Map<String, dynamic>;
   data['requester'] = {'name': 'Example Lending', 'logo_url': null};
   data['custom_message'] =
@@ -61,6 +61,12 @@ Map<String, dynamic> _session({required bool received}) {
   statement['capture_method'] = 'upload';
   statement['requested_sides'] = ['front'];
   profile['document_requirements'] = received ? [] : [id, statement];
+  profile['form_schema'] = null;
+  profile['verification_requirements'] = received
+      ? []
+      : fixture(
+          'capture-session',
+        )['data']['profile']['verification_requirements'];
   return raw;
 }
 
@@ -76,15 +82,20 @@ void main() {
     bool start = true,
     Future<void> Function()? then,
     Brightness brightness = Brightness.light,
+    http.Client? backend,
+    LivenessSourceFactory? liveness,
+    LocationSource? location,
   }) async {
     await tester.runAsync(_loadFonts);
     tester.view.physicalSize = const Size(390 * 3, 700 * 3);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
-    final client = MockClient(
-      (request) async =>
-          http.Response(jsonEncode(_session(received: received)), 200),
-    );
+    final client =
+        backend ??
+        MockClient(
+          (request) async =>
+              http.Response(jsonEncode(_session(received: received)), 200),
+        );
     final key = GlobalKey();
     await tester.pumpWidget(
       RepaintBoundary(
@@ -96,6 +107,8 @@ void main() {
             httpClient: client,
             autoStart: start,
             onClose: () {},
+            livenessSource: liveness ?? FakeLivenessSource.new,
+            locationSource: location ?? FakeLocationSource([locationFix]),
             sessionProvider: () async => SessionDescriptor.fromJson({
               'session_id': '01a1f911-78ef-70b7-8ebc-4651850380c5',
               'token': 'docs-session-token',
@@ -147,4 +160,142 @@ void main() {
     (tester) =>
         shoot(tester, 'sdk-documents-dark', brightness: Brightness.dark),
   );
+
+  for (final dark in [false, true]) {
+    final suffix = dark ? '-dark' : '';
+    final brightness = dark ? Brightness.dark : Brightness.light;
+    testWidgets('liveness intro$suffix', (tester) {
+      final backend = Backend()
+        ..sessions.add(withRequirements(['facial_verification']));
+      return shoot(
+        tester,
+        'sdk-liveness-intro$suffix',
+        backend: backend.client,
+        brightness: brightness,
+      );
+    });
+    testWidgets('liveness prompt$suffix', (tester) {
+      final backend = Backend()
+        ..sessions.add(withRequirements(['facial_verification']));
+      final source = FakeLivenessSource();
+      return shoot(
+        tester,
+        'sdk-liveness-prompt$suffix',
+        backend: backend.client,
+        brightness: brightness,
+        liveness: () => source,
+        then: () async {
+          await tester.ensureVisible(
+            find.text(copy(SpecCopyKey.livenessStart)),
+          );
+          await tester.tap(find.text(copy(SpecCopyKey.livenessStart)));
+          await tester.pump();
+          await tester.pump();
+          source.play('position_ok_pass');
+          await tester.pump();
+          source.play('${gestures.first}_pass');
+          await tester.pump();
+        },
+      );
+    });
+    testWidgets('liveness review$suffix', (tester) {
+      final backend = Backend()
+        ..sessions.add(withRequirements(['facial_verification']));
+      final source = FakeLivenessSource();
+      return shoot(
+        tester,
+        'sdk-liveness-review$suffix',
+        backend: backend.client,
+        brightness: brightness,
+        liveness: () => source,
+        then: () async {
+          await tester.ensureVisible(
+            find.text(copy(SpecCopyKey.livenessStart)),
+          );
+          await tester.tap(find.text(copy(SpecCopyKey.livenessStart)));
+          await tester.pump();
+          await tester.pump();
+          for (final name in [
+            'position_ok_pass',
+            for (final gesture in gestures) '${gesture}_pass',
+          ]) {
+            source.play(name);
+            await tester.pump();
+          }
+          await tester.pumpAndSettle();
+        },
+      );
+    });
+    testWidgets('location consent$suffix', (tester) {
+      final backend = Backend()
+        ..sessions.add(withRequirements(['location_verification']));
+      return shoot(
+        tester,
+        'sdk-location$suffix',
+        backend: backend.client,
+        brightness: brightness,
+      );
+    });
+    testWidgets('location found$suffix', (tester) {
+      final backend = Backend()
+        ..sessions.add(withRequirements(['location_verification']));
+      return shoot(
+        tester,
+        'sdk-location-found$suffix',
+        backend: backend.client,
+        brightness: brightness,
+        then: () async {
+          await tester.ensureVisible(
+            find.text(copy(SpecCopyKey.locationShare)),
+          );
+          await tester.tap(find.text(copy(SpecCopyKey.locationShare)));
+          await tester.pumpAndSettle();
+        },
+      );
+    });
+    testWidgets('location rejected$suffix', (tester) {
+      final backend = Backend()
+        ..locationRejection = fixture('reference-rejection')
+        ..sessions.add(withRequirements(['location_verification']));
+      return shoot(
+        tester,
+        'sdk-location-rejected$suffix',
+        backend: backend.client,
+        brightness: brightness,
+        then: () async {
+          await tester.ensureVisible(
+            find.text(copy(SpecCopyKey.locationShare)),
+          );
+          await tester.tap(find.text(copy(SpecCopyKey.locationShare)));
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(find.text(copy(SpecCopyKey.locationSend)));
+          await tester.tap(find.text(copy(SpecCopyKey.locationSend)));
+          await tester.pumpAndSettle();
+        },
+      );
+    });
+    testWidgets('receipt$suffix', (tester) {
+      final backend = Backend()
+        ..sessions.addAll([
+          withRequirements(['location_verification']),
+          fixture('facial-complete'),
+        ]);
+      return shoot(
+        tester,
+        'sdk-receipt$suffix',
+        backend: backend.client,
+        brightness: brightness,
+        then: () async {
+          await tester.ensureVisible(
+            find.text(copy(SpecCopyKey.locationShare)),
+          );
+          await tester.tap(find.text(copy(SpecCopyKey.locationShare)));
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(find.text(copy(SpecCopyKey.locationSend)));
+          await tester.tap(find.text(copy(SpecCopyKey.locationSend)));
+          await tester.pumpAndSettle();
+        },
+      );
+    });
+  }
 }

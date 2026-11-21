@@ -1,25 +1,26 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:credflare_example/main.dart';
+import '../../test/support/fixtures.dart';
 
 void main() {
   testWidgets(
     'starts the selected flow without pasting or keeping a session field',
     (tester) async {
-      final raw = File(
-        '../test/fixtures/capture-snapshot_and_upload.json',
-      ).readAsStringSync();
-      final info = jsonDecode(raw) as Map<String, dynamic>;
+      final info = captureSession(
+        'snapshot_and_upload',
+        root: '../test/fixtures',
+      );
+      final raw = jsonEncode(info);
       String? chosenMode;
       var handoffs = 0;
       final client = MockClient((request) async {
         if (request.method == 'POST') {
           handoffs++;
-          chosenMode = (jsonDecode(request.body) as Map)['mode'] as String;
+          chosenMode = (jsonDecode(request.body) as Map)['mode'] as String?;
           return http.Response(
             jsonEncode({
               'session_id': info['data']['session_id'],
@@ -34,12 +35,11 @@ void main() {
       });
       await tester.pumpWidget(MaterialApp(home: Example(httpClient: client)));
       expect(find.byType(TextField), findsNothing);
-      await tester.tap(find.text('Photos and files'));
       await tester.ensureVisible(find.text('Start verification'));
       await tester.tap(find.text('Start verification'));
       await tester.pumpAndSettle();
       expect(handoffs, 1);
-      expect(chosenMode, 'snapshot_and_upload');
+      expect(chosenMode, isNull);
       expect(find.text('Documents requested'), findsOneWidget);
       expect(
         find.text(info['data']['requester']['name'] as String),

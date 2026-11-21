@@ -6,7 +6,8 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	<key>NSCameraUsageDescription</key><string>Capture documents for your verification.</string>
+	<key>NSCameraUsageDescription</key><string>Capture documents, a selfie and a short face video requested by your verifier.</string>
+	<key>NSLocationWhenInUseUsageDescription</key><string>Share your current location when your verifier asks for it.</string>
 	<key>NSPhotoLibraryUsageDescription</key><string>Select document images for your verification.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>

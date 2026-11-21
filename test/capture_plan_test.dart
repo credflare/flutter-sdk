@@ -1,20 +1,13 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:credflare_sdk/credflare_sdk.dart';
+import 'support/fixtures.dart';
 
 void main() {
   test(
     'combined capture keeps photos and uploads as separate required steps',
     () async {
-      final fixture =
-          jsonDecode(
-                await File(
-                  'test/fixtures/capture-snapshot_and_upload.json',
-                ).readAsString(),
-              )
-              as Map;
+      final fixture = captureSession('snapshot_and_upload');
       final requirement = Map<String, dynamic>.from(
         fixture['data']['profile']['document_requirements'][0] as Map,
       );
@@ -27,31 +20,24 @@ void main() {
       ]);
     },
   );
-  test('either capture asks once for each side', () async {
-    final fixture =
-        jsonDecode(
-              await File('test/fixtures/capture-either.json').readAsString(),
-            )
-            as Map;
+  test('snapshot_or_upload capture asks once for each side', () async {
+    final fixture = captureSession('snapshot_or_upload');
     final requirement = Map<String, dynamic>.from(
       fixture['data']['profile']['document_requirements'][0] as Map,
     );
     expect(captureSteps(requirement).map((e) => e.id).toList(), [
-      'either:front',
-      'either:back',
+      'camera_or_upload:front',
+      'camera_or_upload:back',
     ]);
   });
-  Future<Map<String, dynamic>> fixture(String name) async {
-    final data = jsonDecode(await File(name).readAsString()) as Map;
-    return Map<String, dynamic>.from(
-      data['data']['profile']['document_requirements'][0] as Map,
-    );
-  }
+  Future<Map<String, dynamic>> load(String method) async =>
+      Map<String, dynamic>.from(
+        captureSession(method)['data']['profile']['document_requirements'][0]
+            as Map,
+      );
 
   test('steps carry side and source labels', () async {
-    final steps = captureSteps(
-      await fixture('test/fixtures/capture-snapshot_and_upload.json'),
-    );
+    final steps = captureSteps(await load('snapshot_and_upload'));
     expect(steps.map((e) => '${e.label} ${e.sourceLabel}').toList(), [
       'Front Camera photo',
       'Back Camera photo',
@@ -62,19 +48,31 @@ void main() {
   test(
     'a requirement without capture_method follows its document type',
     () async {
-      final requirement = await fixture('test/fixtures/capture-either.json')
+      final requirement = await load('snapshot_or_upload')
         ..remove('capture_method');
-      expect(capturePolicy(requirement), 'either');
+      expect(capturePolicy(requirement), 'snapshot_or_upload');
       expect(methodSummary(requirement), 'Photo or file');
     },
   );
+  test('a stored either method reads as snapshot_or_upload', () async {
+    final requirement = await load('snapshot_or_upload')
+      ..['capture_method'] = 'either';
+    expect(capturePolicy(requirement), 'snapshot_or_upload');
+    expect(captureSteps(requirement).map((e) => e.id).toList(), [
+      'camera_or_upload:front',
+      'camera_or_upload:back',
+    ]);
+  });
   test(
     'an unsupported method is reported instead of producing steps',
     () async {
-      final requirement = await fixture('test/fixtures/capture-either.json')
+      final requirement = await load('snapshot_or_upload')
         ..['capture_method'] = 'camera_only';
       expect(isCaptureSupported(requirement), isFalse);
-      expect(methodSummary(requirement), 'Not available in this app');
+      expect(
+        methodSummary(requirement),
+        'Not available in this app. Contact your verifier.',
+      );
       expect(() => captureSteps(requirement), throwsUnsupportedError);
     },
   );

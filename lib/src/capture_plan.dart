@@ -1,34 +1,54 @@
-const _supported = ['upload', 'either', 'snapshot', 'snapshot_and_upload'];
+import 'copy.dart';
+import 'spec.generated.dart';
+
+const _supported = [
+  'upload',
+  'snapshot_or_upload',
+  'snapshot',
+  'snapshot_and_upload',
+];
 
 class CaptureStep {
   final String source;
   final String side;
   const CaptureStep(this.source, this.side);
   String get id => '$source:$side';
-  String get label => side == 'front' ? 'Front' : 'Back';
-  String get sourceLabel => source == 'camera'
-      ? 'Camera photo'
-      : source == 'upload'
-      ? 'Saved file'
-      : 'Photo or file';
+  String get label => copy(
+    side == 'front'
+        ? SpecCopyKey.captureSideFront
+        : SpecCopyKey.captureSideBack,
+  );
+  String get sourceLabel => copy(
+    source == 'camera'
+        ? SpecCopyKey.captureSourceCamera
+        : source == 'upload'
+        ? SpecCopyKey.captureSourceUpload
+        : SpecCopyKey.documentsMethodEither,
+  );
 }
 
 String capturePolicy(Map<String, dynamic> requirement) {
   final document = requirement['document_type'] as Map;
-  return requirement['capture_method'] as String? ??
-      (document['capture_method'] == 'camera' ? 'either' : 'upload');
+  final method =
+      requirement['capture_method'] as String? ??
+      (document['capture_method'] == 'camera'
+          ? 'snapshot_or_upload'
+          : 'upload');
+  return method == 'either' ? 'snapshot_or_upload' : method;
 }
 
 bool isCaptureSupported(Map<String, dynamic> requirement) =>
     _supported.contains(capturePolicy(requirement));
 
-String methodSummary(Map<String, dynamic> requirement) =>
+String methodSummary(Map<String, dynamic> requirement, [String? verifier]) =>
     switch (capturePolicy(requirement)) {
-      'snapshot' => 'Camera photos',
-      'upload' => 'Saved files',
-      'either' => 'Photo or file',
-      'snapshot_and_upload' => 'Photo and saved file',
-      _ => 'Not available in this app',
+      'snapshot' => copy(SpecCopyKey.documentsMethodCamera),
+      'upload' => copy(SpecCopyKey.documentsMethodUpload),
+      'snapshot_or_upload' => copy(SpecCopyKey.documentsMethodEither),
+      'snapshot_and_upload' => copy(SpecCopyKey.documentsMethodBoth),
+      _ => copy(SpecCopyKey.documentsUnavailable, {
+        'verifier': verifier ?? copy(SpecCopyKey.commonVerifierFallback),
+      }),
     };
 
 List<CaptureStep> captureSteps(Map<String, dynamic> requirement) {
@@ -45,8 +65,8 @@ List<CaptureStep> captureSteps(Map<String, dynamic> requirement) {
       : [
           method == 'snapshot'
               ? 'camera'
-              : method == 'either'
-              ? 'either'
+              : method == 'snapshot_or_upload'
+              ? 'camera_or_upload'
               : 'upload',
         ];
   return [
