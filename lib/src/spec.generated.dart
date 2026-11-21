@@ -1,9 +1,9 @@
 // GENERATED FILE, DO NOT EDIT.
-// Source: credflare sdk-spec 1.0.0 (3f923c2940de). Regenerate with scripts/generate.mjs.
+// Source: credflare sdk-spec 1.0.0 (1ee014f4a1df). Regenerate with scripts/generate.mjs.
 // ignore_for_file: type=lint
 
 const String credflareSpecVersion = '1.0.0';
-const String credflareSpecHash = '3f923c2940de';
+const String credflareSpecHash = '1ee014f4a1df';
 
 /// One step of a gesture. value and holdFrames name a threshold key.
 final class SpecGestureStep {
@@ -446,6 +446,9 @@ abstract final class SpecCopy {
     'documents.method_both': 'Photo and saved file',
     'documents.unavailable': 'Not available in this app. Contact {verifier}.',
     'documents.selfie_next': 'After your documents, you will take a selfie.',
+    'documents.location_next': 'After your documents, you will share your location.',
+    'documents.selfie_location_next': 'After your documents, you will take a selfie and share your location.',
+    'documents.location_selfie_next': 'After your documents, you will share your location and take a selfie.',
     'documents.host_steps_next': 'After your documents, the app will guide you through the remaining steps.',
     'capture.side_front': 'Front',
     'capture.side_back': 'Back',
@@ -627,6 +630,9 @@ abstract final class SpecCopyKey {
   static const String documentsMethodBoth = 'documents.method_both';
   static const String documentsUnavailable = 'documents.unavailable';
   static const String documentsSelfieNext = 'documents.selfie_next';
+  static const String documentsLocationNext = 'documents.location_next';
+  static const String documentsSelfieLocationNext = 'documents.selfie_location_next';
+  static const String documentsLocationSelfieNext = 'documents.location_selfie_next';
   static const String documentsHostStepsNext = 'documents.host_steps_next';
   static const String captureSideFront = 'capture.side_front';
   static const String captureSideBack = 'capture.side_back';

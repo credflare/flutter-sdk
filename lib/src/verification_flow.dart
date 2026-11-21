@@ -474,18 +474,27 @@ class _VerificationState extends State<CredflareVerification> {
         const SizedBox(height: 10),
         for (final doc in section.items) _card(doc, verifier),
       ],
-      if (sdkStep != null || hostSteps) ...[
+      if (_nextSteps(pending, hostSteps) case final next?) ...[
         const SizedBox(height: 8),
-        CredflareBody(
-          copy(
-            sdkStep?.type == 'facial_verification'
-                ? SpecCopyKey.documentsSelfieNext
-                : SpecCopyKey.documentsHostStepsNext,
-          ),
-          small: true,
-        ),
+        CredflareBody(copy(next), small: true),
       ],
     ];
+  }
+
+  String? _nextSteps(List<VerificationRequirement> pending, bool hostSteps) {
+    final order = <String>{
+      for (final item in pending)
+        if (sdkVerificationTypes.contains(item.type)) item.type,
+    }.toList();
+    return switch (order) {
+      ['facial_verification'] => SpecCopyKey.documentsSelfieNext,
+      ['location_verification'] => SpecCopyKey.documentsLocationNext,
+      ['facial_verification', 'location_verification'] =>
+        SpecCopyKey.documentsSelfieLocationNext,
+      ['location_verification', 'facial_verification'] =>
+        SpecCopyKey.documentsLocationSelfieNext,
+      _ => hostSteps ? SpecCopyKey.documentsHostStepsNext : null,
+    };
   }
 
   Widget _card(Map<String, dynamic> doc, String verifier) {

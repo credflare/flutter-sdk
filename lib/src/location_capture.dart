@@ -8,6 +8,9 @@ import 'spec.generated.dart';
 import 'theme.dart';
 import 'ui.dart';
 
+const referenceRejectionMessage =
+    'Your location does not meet the place requirement for this verification.';
+
 enum _Phase { consent, locating, found, sending }
 
 class CredflareLocationCapture extends StatefulWidget {
@@ -143,11 +146,28 @@ class _LocationState extends State<CredflareLocationCapture> {
       final rejected = error is CredflareException && error.status == 422;
       setState(() {
         _phase = rejected ? _Phase.consent : _Phase.found;
-        _error = error is CredflareException && error.status != 0
-            ? error.message
-            : copy(SpecCopyKey.errorsSendLocationFailed);
+        _error = _rejection(error);
       });
     }
+  }
+
+  String _rejection(Object error) {
+    final reference = widget.settings.reference;
+    if (error is! CredflareException || error.status == 0) {
+      return copy(SpecCopyKey.errorsSendLocationFailed);
+    }
+    if (error.status == 422 &&
+        error.message == referenceRejectionMessage &&
+        reference != null &&
+        reference.labels.isNotEmpty) {
+      return copy(
+        reference.rule == 'outside'
+            ? SpecCopyKey.locationPlaceNotMatchedOutside
+            : SpecCopyKey.locationPlaceNotMatchedWithin,
+        {'place': reference.labels.join(', ')},
+      );
+    }
+    return error.message;
   }
 
   String _title() {
@@ -165,14 +185,10 @@ class _LocationState extends State<CredflareLocationCapture> {
 
   String? _need() {
     final reference = widget.settings.reference;
-    if (reference == null || reference.labels.isEmpty) return null;
+    if (reference == null || reference.labels.length < 2) return null;
     final outside = reference.rule == 'outside';
     final all = reference.match == 'all';
-    final key = reference.labels.length == 1
-        ? (outside
-              ? SpecCopyKey.locationPlaceNeedOutside
-              : SpecCopyKey.locationPlaceNeedWithin)
-        : outside
+    final key = outside
         ? (all
               ? SpecCopyKey.locationPlaceNeedOutsideAll
               : SpecCopyKey.locationPlaceNeedOutsideAny)

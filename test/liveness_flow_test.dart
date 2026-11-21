@@ -211,7 +211,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a rejected location shows the server reason and a retry', (
+  testWidgets('a place mismatch names the place and offers a retry', (
     tester,
   ) async {
     final backend = Backend()
@@ -232,17 +232,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       find.text(
-        copy(SpecCopyKey.locationPlaceNeedWithin, {'place': 'Head office'}),
+        copy(SpecCopyKey.locationPlaceTitleWithin, {'place': 'Head office'}),
       ),
       findsOneWidget,
+    );
+    expect(
+      find.text(
+        copy(SpecCopyKey.locationPlaceNeedWithin, {'place': 'Head office'}),
+      ),
+      findsNothing,
     );
     await tapText(tester, copy(SpecCopyKey.locationShare));
     await tester.pumpAndSettle();
     await tapText(tester, copy(SpecCopyKey.locationSend));
     await tester.pumpAndSettle();
     expect(
-      find.text(fixture('reference-rejection')['message'] as String),
+      find.text(
+        copy(SpecCopyKey.locationPlaceNotMatchedWithin, {
+          'place': 'Head office',
+        }),
+      ),
       findsOneWidget,
+    );
+    expect(
+      fixture('reference-rejection')['message'],
+      referenceRejectionMessage,
     );
     expect(find.text(copy(SpecCopyKey.locationRetry)), findsOneWidget);
   });
@@ -293,5 +307,61 @@ void main() {
       find.text(copy(SpecCopyKey.locationPermissionDenied)),
       findsOneWidget,
     );
+  });
+
+  testWidgets('the documents list names the steps the SDK runs next', (
+    tester,
+  ) async {
+    Future<void> show(List<String> types, {bool form = false}) async {
+      final raw = withRequirements(types);
+      final profile = raw['data']['profile'] as Map<String, dynamic>;
+      profile['document_requirements'] = fixture(
+        'session',
+      )['data']['profile']['document_requirements'];
+      profile['form_schema'] = form
+          ? fixture('session')['data']['profile']['form_schema']
+          : null;
+      final backend = Backend()..sessions.add(raw);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CredflareVerification(
+            key: UniqueKey(),
+            autoStart: true,
+            onClose: () {},
+            httpClient: backend.client,
+            sessionProvider: () async => descriptor(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    final lines = [
+      SpecCopyKey.documentsSelfieNext,
+      SpecCopyKey.documentsLocationNext,
+      SpecCopyKey.documentsSelfieLocationNext,
+      SpecCopyKey.documentsLocationSelfieNext,
+      SpecCopyKey.documentsHostStepsNext,
+    ].map(copy).toList();
+    void only(String? expected) {
+      for (final line in lines) {
+        expect(
+          find.text(line),
+          line == expected ? findsOneWidget : findsNothing,
+          reason: line,
+        );
+      }
+    }
+
+    await show(['facial_verification', 'location_verification'], form: true);
+    only(copy(SpecCopyKey.documentsSelfieLocationNext));
+    await show(['location_verification']);
+    only(copy(SpecCopyKey.documentsLocationNext));
+    await show(['facial_verification']);
+    only(copy(SpecCopyKey.documentsSelfieNext));
+    await show([], form: true);
+    only(copy(SpecCopyKey.documentsHostStepsNext));
+    await show([]);
+    only(null);
   });
 }

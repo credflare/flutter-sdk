@@ -58,6 +58,12 @@ Map<String, dynamic> _session({required bool received}) {
   statement['capture_method'] = 'upload';
   statement['requested_sides'] = ['front'];
   profile['document_requirements'] = received ? [] : [id, statement];
+  profile['form_schema'] = null;
+  profile['verification_requirements'] = received
+      ? []
+      : fixture(
+          'capture-session',
+        )['data']['profile']['verification_requirements'];
   return raw;
 }
 
