@@ -488,25 +488,46 @@ void main() {
   testWidgets('other liveness rejections show the server message', (
     tester,
   ) async {
-    final backend = Backend()
-      ..facialRejection = fixture(
-        'rejections/${SpecErrorCode.livenessVideoTooLong}',
-      )
-      ..sessions.add(withRequirements(['facial_verification']));
-    final sources = <FakeLivenessSource>[];
-    await tester.pumpWidget(facialApp(backend, sources));
-    await tester.pumpAndSettle();
-    await recordChallenge(tester, () => sources.last);
-    await tapText(tester, copy(SpecCopyKey.selfieSend));
-    await tester.pumpAndSettle();
+    final codes = [
+      SpecErrorCode.livenessGestureMismatch,
+      SpecErrorCode.livenessNotCamera,
+      SpecErrorCode.livenessVideoMissing,
+      SpecErrorCode.livenessVideoTooLong,
+      SpecErrorCode.livenessVideoUnreadable,
+    ];
     expect(
-      find.text(
-        fixture('rejections/${SpecErrorCode.livenessVideoTooLong}')['message']
-            as String,
-      ),
-      findsOneWidget,
+      {
+        ...codes,
+        SpecErrorCode.livenessChallengeExpired,
+        SpecErrorCode.livenessChallengeInvalid,
+        SpecErrorCode.livenessChallengeUsed,
+        SpecErrorCode.livenessFrameOutOfWindow,
+      },
+      SpecErrorCode.meanings.keys
+          .where((c) => c.startsWith('liveness.'))
+          .toSet(),
     );
-    expect(find.text(copy(SpecCopyKey.livenessRetry)), findsOneWidget);
+    for (final code in codes) {
+      final rejection = fixture('rejections/$code');
+      expect(rejection['code'], code);
+      final backend = Backend()
+        ..facialRejection = rejection
+        ..sessions.add(withRequirements(['facial_verification']));
+      final sources = <FakeLivenessSource>[];
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(facialApp(backend, sources));
+      await tester.pumpAndSettle();
+      await recordChallenge(tester, () => sources.last);
+      await tapText(tester, copy(SpecCopyKey.selfieSend));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(rejection['message'] as String),
+        findsOneWidget,
+        reason: code,
+      );
+      expect(find.text(copy(SpecCopyKey.livenessRetry)), findsOneWidget);
+      expect(backend.challenges, 1, reason: code);
+    }
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -559,6 +580,96 @@ void main() {
     expect(find.text(copy(SpecCopyKey.locationMockDetected)), findsOneWidget);
     expect(backend.requests.where((r) => r.path.endsWith('/submit')), isEmpty);
   });
+
+  Future<FakeLocationSource> shareLocation(
+    WidgetTester tester,
+    Backend backend,
+    List<LocationFix Function()> fixes,
+  ) async {
+    final location = FakeLocationSource(fixes);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CredflareVerification(
+          autoStart: true,
+          onClose: () {},
+          httpClient: backend.client,
+          sessionProvider: () async => descriptor(),
+          locationSource: location,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapText(tester, copy(SpecCopyKey.locationShare));
+    await tester.pumpAndSettle();
+    return location;
+  }
+
+  int maxAge(Map<String, dynamic> session) =>
+      (session['data']['profile']['verification_requirements'] as List)
+              .single['settings']['max_age_s']
+          as int;
+
+  testWidgets('a stale fix is not sent and a fresh one replaces it', (
+    tester,
+  ) async {
+    final session = withRequirements(['location_verification']);
+    final stale = Duration(seconds: maxAge(session) + 5);
+    final backend = Backend()..sessions.add(session);
+    final location = await shareLocation(tester, backend, [
+      () => locationFix(age: stale),
+      () => locationFix(),
+    ]);
+    expect(location.requests, 2);
+    await tapText(tester, copy(SpecCopyKey.locationSend));
+    await tester.pumpAndSettle();
+    final sent =
+        jsonDecode(
+              backend.requests
+                  .singleWhere((r) => r.path.endsWith('/submit'))
+                  .body!,
+            )
+            as Map;
+    final age = DateTime.now().difference(
+      DateTime.parse(sent['metadata']['fix_time'] as String),
+    );
+    expect(age.inSeconds, lessThanOrEqualTo(maxAge(session)));
+  });
+
+  testWidgets('only stale fixes are never sent', (tester) async {
+    final session = withRequirements(['location_verification']);
+    final stale = Duration(seconds: maxAge(session) + 5);
+    final backend = Backend()..sessions.add(session);
+    final location = await shareLocation(tester, backend, [
+      () => locationFix(age: stale),
+    ]);
+    expect(location.requests, SpecLocation.retryAttempts);
+    expect(find.text(copy(SpecCopyKey.locationSend)), findsNothing);
+    expect(find.text(copy(SpecCopyKey.locationRetry)), findsOneWidget);
+    expect(backend.requests.where((r) => r.path.endsWith('/submit')), isEmpty);
+  });
+
+  testWidgets(
+    'a mocked location is sent with its flag when the profile allows',
+    (tester) async {
+      final session = withRequirements(['location_verification']);
+      (session['data']['profile']['verification_requirements'] as List)
+              .single['settings']['mock_location'] =
+          'flag';
+      final backend = Backend()..sessions.add(session);
+      await shareLocation(tester, backend, [() => locationFix(isMock: true)]);
+      expect(find.text(copy(SpecCopyKey.locationMockDetected)), findsNothing);
+      await tapText(tester, copy(SpecCopyKey.locationSend));
+      await tester.pumpAndSettle();
+      final sent =
+          jsonDecode(
+                backend.requests
+                    .singleWhere((r) => r.path.endsWith('/submit'))
+                    .body!,
+              )
+              as Map;
+      expect(sent['metadata']['is_mock'], true);
+    },
+  );
 
   testWidgets('denied location access explains how to turn it on', (
     tester,
