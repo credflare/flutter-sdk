@@ -41,11 +41,13 @@ final submissionId = await session.submit({
 }, key: requestKey());
 ```
 
-Keep each request key with its unchanged payload until the operation succeeds. Use the same key after a network interruption. Use a new key when the applicant replaces evidence. Use `captureSteps(requirement)` to collect every requested side and source.
+Every upload and submission requires an `X-Idempotency-Key`, so each call takes a `key`. Keep each request key with its unchanged payload until the operation succeeds. Use the same key after a network interruption. Use a new key when the applicant replaces evidence. Use `captureSteps(requirement)` to collect every requested side and source.
 
 The client also submits requested form fields, liveness evidence and coordinates. `createLivenessChallenge()` asks the server for the gestures to run, `uploadBiometric` sends gesture frames, the liveness video and the selfie bound to that challenge, and `submitFacial` and `submitLocation` submit them. A completed challenge shows that the camera recorded a server chosen sequence in time. It is not a verification decision and does not detect deepfakes. Submission receipts are not verification decisions. Use the server API or webhook for the final decision.
 
 `CredflareSessionController(provider: ...)` loads a descriptor from your authenticated backend and exposes `session`, `info`, `loading` and `error`. Concurrent `load()` calls share one operation. The provider must keep the same verification case when renewing access. Dispose the controller when leaving the flow.
+
+A rejected capture throws `CredflareException` with status 422 and a stable `code` from `SpecErrorCode` (for example `location.stale` or `liveness.challenge_expired`). Match on `code` and show your own copy; `message` is for people and may change. A code the SDK does not know yet is kept as the raw string and `hasKnownCode` is false. The guided screens map each code to spec copy, and a liveness challenge code starts over with a new challenge.
 
 A 401 means the session is unavailable. Ask the host backend whether it can issue a replacement. `replaceSession` updates the temporary credential while retaining the client object. `cancel()` revokes that session while preserving the verification case. Dispose clients with `close()` when no longer needed.
 

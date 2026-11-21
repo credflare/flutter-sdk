@@ -14,7 +14,7 @@ Date: 2026-11-21. Host: macOS 26.3, Apple Silicon. Flutter 3.41.9, Dart 3.11.5, 
 ## What the tests cover
 
 - Every liveness trace in the spec is replayed through the gesture engine and must give its expected outcome.
-- Contract tests send real HTTP requests to a local server that answers with the API fixtures: session load, liveness challenge, gesture, video and selfie uploads with their multipart fields and request keys, facial and location submissions, and a rejected location surfaced as a validation error.
+- Contract tests send real HTTP requests to a local server that answers with the API fixtures: session load, liveness challenge, gesture, video and selfie uploads with their multipart fields and request keys, facial and location submissions, and rejections whose `code` is parsed from the fixtures. Widget tests check that every upload and submission carries a request key, that a dropped submission reuses its key, and that each rejection code shows its own copy.
 - ML Kit results are converted to the shared face signals with and without mirroring, using the plugin's own `Face` type.
 - Widget tests drive the full flow with a fake camera source that replays spec traces and a fake location source: position gate, three gestures with frames and video, selfie review, uploads bound to the challenge, facial submission, location retries until accurate, location submission and the receipt. Further tests cover a timed out gesture asking for a new challenge, a rejected location showing the server reason, a mocked location refused before sending and denied location access.
 
