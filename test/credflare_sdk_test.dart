@@ -3,6 +3,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:credflare_sdk/credflare_sdk.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
   late HttpServer server;
@@ -81,6 +83,7 @@ void main() {
   });
   test('uploads and submits with stable request keys', () async {
     final key = requestKey();
+    final submitKey = requestKey();
     final file = await client.upload(
       bytes: [1, 2, 3],
       filename: 'front.png',
@@ -92,9 +95,10 @@ void main() {
       'type': 'document_verification',
       'document_type_id': 1,
       'file_id': file['id'],
-    }, key: requestKey());
+    }, key: submitKey);
     expect(id, 1);
     expect(calls.first.headers.value('x-idempotency-key'), key);
+    expect(calls.last.headers.value('x-idempotency-key'), submitKey);
     expect(calls.first.headers.contentType!.mimeType, 'multipart/form-data');
     expect(bodies.first, contains('name="document_type_id"\r\n\r\n7\r\n'));
     expect(bodies.first, contains('name="capture_source"\r\n\r\ncamera\r\n'));
@@ -118,7 +122,7 @@ void main() {
       'Bearer test-session-token',
     );
     expect(challenge.id, fixture['challenge_id']);
-    expect(challenge.gestures, ['blink', 'smile', 'turn_right']);
+    expect(challenge.gestures, fixture['gestures']);
     expect(challenge.recordVideo, isTrue);
     expect(challenge.maxVideoSeconds, 8);
     expect(challenge.expiresAt, DateTime.parse(fixture['expires_at']));
@@ -226,8 +230,10 @@ void main() {
   );
 
   test('submits a location fix with its metadata', () async {
-    final id = await client.submitLocation(fix(), key: requestKey());
+    final key = requestKey();
+    final id = await client.submitLocation(fix(), key: key);
     expect(id, 2);
+    expect(calls.single.headers.value('x-idempotency-key'), key);
     final body = jsonDecode(bodies.single) as Map;
     expect(body, {
       'type': 'location_verification',
@@ -244,20 +250,53 @@ void main() {
     });
   });
 
-  test('surfaces a rejected location as a validation error', () async {
+  test('surfaces a rejected location with its rejection code', () async {
     rejectLocation = true;
-    final message = jsonDecode(
+    final fixture = jsonDecode(
       File('test/fixtures/location-rejection.json').readAsStringSync(),
-    )['message'];
+    );
+    final key = requestKey();
     await expectLater(
-      client.submitLocation(fix(), key: requestKey()),
+      client.submitLocation(fix(), key: key),
       throwsA(
         isA<CredflareException>()
             .having((e) => e.status, 'status', 422)
             .having((e) => e.type, 'type', 'validation')
-            .having((e) => e.message, 'message', message),
+            .having((e) => e.message, 'message', fixture['message'])
+            .having((e) => e.code, 'code', SpecErrorCode.locationAccuracy)
+            .having((e) => e.hasKnownCode, 'hasKnownCode', isTrue),
       ),
     );
+    expect(calls.single.headers.value('x-idempotency-key'), key);
+  });
+
+  test('keeps unknown rejection codes and tolerates missing ones', () async {
+    Future<CredflareException> reject(Map<String, dynamic> envelope) async {
+      final session = CredflareSession(
+        client.descriptor,
+        client: MockClient(
+          (_) async => http.Response(jsonEncode(envelope), 422),
+        ),
+      );
+      try {
+        await session.submitLocation(fix(), key: requestKey());
+      } on CredflareException catch (error) {
+        return error;
+      }
+      throw StateError('Expected a rejection');
+    }
+
+    final base =
+        jsonDecode(
+              File('test/fixtures/reference-rejection.json').readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    final unknown = await reject({...base, 'code': 'location.new_rule'});
+    expect(unknown.code, 'location.new_rule');
+    expect(unknown.hasKnownCode, isFalse);
+    final missing = await reject({...base}..remove('code'));
+    expect(missing.code, isNull);
+    expect(missing.hasKnownCode, isFalse);
   });
 
   test('reads facial and location settings with reference labels', () {

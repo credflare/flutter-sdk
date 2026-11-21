@@ -22,7 +22,9 @@ class Backend {
   final sessions = <Map<String, dynamic>>[];
   var challenges = 0;
   var nextFileId = 10;
-  var rejectLocation = false;
+  Map<String, dynamic>? locationRejection;
+  Map<String, dynamic>? facialRejection;
+  var dropNextSubmit = false;
   late final MockClient client = MockClient((request) async {
     final path = request.url.path;
     final fields = path.contains('/uploads/')
@@ -34,6 +36,7 @@ class Backend {
         path,
         fields,
         path.endsWith('/submit') ? request.body : null,
+        request.headers['X-Idempotency-Key'],
       ),
     );
     if (request.method == 'GET') {
@@ -60,12 +63,21 @@ class Backend {
       raw['data']['id'] = nextFileId++;
       return http.Response(jsonEncode(raw), 201);
     }
+    if (dropNextSubmit) {
+      dropNextSubmit = false;
+      throw http.ClientException('Connection reset', request.url);
+    }
     final type = jsonDecode(request.body)['type'];
-    if (type == 'location_verification' && rejectLocation) {
-      return http.Response(
-        jsonEncode(fixture('reference-rejection', root: root)),
-        422,
-      );
+    final rejection = type == 'location_verification'
+        ? locationRejection
+        : null;
+    if (rejection != null) {
+      return http.Response(jsonEncode(rejection), 422);
+    }
+    final facial = type == 'facial_verification' ? facialRejection : null;
+    if (facial != null) {
+      facialRejection = null;
+      return http.Response(jsonEncode(facial), 422);
     }
     return http.Response(
       jsonEncode(

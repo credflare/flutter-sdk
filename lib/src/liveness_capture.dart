@@ -337,11 +337,24 @@ class _LivenessState extends State<CredflareLivenessCapture> {
       setState(() {
         _phase = validation ? _Phase.intro : _Phase.review;
         _canRetry = true;
-        _error = error is CredflareException && error.status != 0
-            ? error.message
-            : copy(SpecCopyKey.errorsSendSelfieFailed);
+        _error = _sendError(error);
       });
     }
+  }
+
+  String _sendError(Object error) {
+    if (error is! CredflareException || error.status == 0) {
+      return copy(SpecCopyKey.errorsSendSelfieFailed);
+    }
+    return switch (error.code) {
+      SpecErrorCode.livenessChallengeExpired ||
+      SpecErrorCode.livenessChallengeInvalid ||
+      SpecErrorCode.livenessChallengeUsed ||
+      SpecErrorCode.livenessFrameOutOfWindow => copy(
+        SpecCopyKey.livenessExpired,
+      ),
+      _ => error.message,
+    };
   }
 
   Widget _preview(BuildContext context) {

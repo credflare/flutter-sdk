@@ -1,9 +1,9 @@
 // GENERATED FILE, DO NOT EDIT.
-// Source: credflare sdk-spec 1.0.0 (1ee014f4a1df). Regenerate with scripts/generate.mjs.
+// Source: credflare sdk-spec 1.0.0 (ef15c85fc748). Regenerate with scripts/generate.mjs.
 // ignore_for_file: type=lint
 
 const String credflareSpecVersion = '1.0.0';
-const String credflareSpecHash = '1ee014f4a1df';
+const String credflareSpecHash = 'ef15c85fc748';
 
 /// One step of a gesture. value and holdFrames name a threshold key.
 final class SpecGestureStep {
@@ -550,6 +550,8 @@ abstract final class SpecCopy {
     'location.timeout': 'We could not find your location in time. Try again.',
     'location.low_accuracy': 'Your location is not accurate enough yet. Move near a window or outside, then try again.',
     'location.mock_detected': 'An app or setting is changing your device location. Turn it off, then try again.',
+    'location.stale': 'Your location reading is out of date. Try again to take a new one.',
+    'location.ip_country_mismatch': 'Your internet connection seems to be in a different country from your location. Turn off any VPN or proxy, then try again.',
     'location.retry': 'Try again',
     'location.retries_exhausted': 'We could not get your location. Contact {verifier}.',
     'location.place.title_within': 'Share your location at {place}',
@@ -734,6 +736,8 @@ abstract final class SpecCopyKey {
   static const String locationTimeout = 'location.timeout';
   static const String locationLowAccuracy = 'location.low_accuracy';
   static const String locationMockDetected = 'location.mock_detected';
+  static const String locationStale = 'location.stale';
+  static const String locationIpCountryMismatch = 'location.ip_country_mismatch';
   static const String locationRetry = 'location.retry';
   static const String locationRetriesExhausted = 'location.retries_exhausted';
   static const String locationPlaceTitleWithin = 'location.place.title_within';
@@ -772,6 +776,39 @@ abstract final class SpecCopyKey {
   static const String errorsSendSelfieFailed = 'errors.send_selfie_failed';
   static const String errorsChallengeFailed = 'errors.challenge_failed';
   static const String errorsSendLocationFailed = 'errors.send_location_failed';
+}
+
+abstract final class SpecErrorCode {
+  static const String locationAccuracy = 'location.accuracy';
+  static const String locationStale = 'location.stale';
+  static const String locationMock = 'location.mock';
+  static const String locationIpCountry = 'location.ip_country';
+  static const String locationReferenceNotMatched = 'location.reference_not_matched';
+  static const String livenessChallengeInvalid = 'liveness.challenge_invalid';
+  static const String livenessChallengeExpired = 'liveness.challenge_expired';
+  static const String livenessChallengeUsed = 'liveness.challenge_used';
+  static const String livenessGestureMismatch = 'liveness.gesture_mismatch';
+  static const String livenessFrameOutOfWindow = 'liveness.frame_out_of_window';
+  static const String livenessNotCamera = 'liveness.not_camera';
+  static const String livenessVideoMissing = 'liveness.video_missing';
+  static const String livenessVideoTooLong = 'liveness.video_too_long';
+  static const String livenessVideoUnreadable = 'liveness.video_unreadable';
+  static const Map<String, String> meanings = {
+    'location.accuracy': 'Accuracy is missing or larger than max_accuracy_m',
+    'location.stale': 'fix_time is missing, older than max_age_s plus clock_skew_s, or in the future',
+    'location.mock': 'is_mock is true and mock_location is reject',
+    'location.ip_country': 'The IP country does not match and ip_country is reject',
+    'location.reference_not_matched': 'The place rule failed and on_mismatch is reject',
+    'liveness.challenge_invalid': 'The challenge is unknown, belongs to another case or was replaced',
+    'liveness.challenge_expired': 'The challenge expired',
+    'liveness.challenge_used': 'The challenge was already used',
+    'liveness.gesture_mismatch': 'A gesture frame is missing, extra, out of order or for a gesture the challenge does not include',
+    'liveness.frame_out_of_window': 'A file was uploaded before the challenge was issued or after it expired',
+    'liveness.not_camera': 'Evidence was not uploaded with capture_source=camera for this challenge',
+    'liveness.video_missing': 'record_video is on and no video for this challenge was sent',
+    'liveness.video_too_long': 'The video is longer than max_video_seconds plus one second',
+    'liveness.video_unreadable': 'The server cannot read the video duration',
+  };
 }
 
 abstract final class SpecTokens {

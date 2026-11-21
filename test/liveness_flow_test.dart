@@ -12,6 +12,46 @@ Future<void> tapText(WidgetTester tester, String text) async {
   await tester.tap(find.text(text));
 }
 
+final uuid = RegExp(
+  r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+);
+
+List<String> challengeGestures() =>
+    (fixture('liveness-challenge')['data']['gestures'] as List).cast<String>();
+
+Future<void> recordChallenge(
+  WidgetTester tester,
+  FakeLivenessSource Function() last, {
+  String button = SpecCopyKey.livenessStart,
+}) async {
+  await tapText(tester, copy(button));
+  await tester.pump();
+  await tester.pump();
+  for (final trace in [
+    'position_ok_pass',
+    for (final gesture in challengeGestures()) '${gesture}_pass',
+  ]) {
+    last().play(trace);
+    await tester.pump();
+  }
+  await tester.pumpAndSettle();
+}
+
+Widget facialApp(Backend backend, List<FakeLivenessSource> sources) =>
+    MaterialApp(
+      home: CredflareVerification(
+        autoStart: true,
+        onClose: () {},
+        httpClient: backend.client,
+        sessionProvider: () async => descriptor(),
+        livenessSource: () {
+          final source = FakeLivenessSource();
+          sources.add(source);
+          return source;
+        },
+      ),
+    );
+
 void main() {
   testWidgets(
     'runs the server challenge, uploads its evidence, then collects location',
@@ -53,7 +93,7 @@ void main() {
       expect(
         find.text(
           copy(SpecCopyKey.videoConsent, {
-            'verifier': "Meghan Stiedemann MD's Workspace",
+            'verifier': verifierName(fixture('capture-session')['data']),
           }),
         ),
         findsOneWidget,
@@ -67,24 +107,25 @@ void main() {
 
       source.play('position_ok_pass');
       await tester.pump();
-      expect(find.text(copy(SpecCopyKey.livenessGestureBlink)), findsOneWidget);
-      expect(
-        find.text(
-          copy(SpecCopyKey.livenessProgress, {'current': 1, 'total': 3}),
-        ),
-        findsOneWidget,
-      );
-      expect(source.events, contains('record'));
-      source.play('blink_pass');
-      await tester.pump();
-      expect(find.text(copy(SpecCopyKey.livenessGestureSmile)), findsOneWidget);
-      source.play('smile_pass');
-      await tester.pump();
-      expect(
-        find.text(copy(SpecCopyKey.livenessGestureTurnRight)),
-        findsOneWidget,
-      );
-      source.play('turn_right_pass');
+      final gestures = challengeGestures();
+      for (var i = 0; i < gestures.length; i++) {
+        expect(
+          find.text(copy('liveness.gesture.${gestures[i]}')),
+          findsOneWidget,
+        );
+        expect(
+          find.text(
+            copy(SpecCopyKey.livenessProgress, {
+              'current': i + 1,
+              'total': gestures.length,
+            }),
+          ),
+          findsOneWidget,
+        );
+        if (i == 0) expect(source.events, contains('record'));
+        source.play('${gestures[i]}_pass');
+        await tester.pump();
+      }
       await tester.pumpAndSettle();
       expect(find.text(copy(SpecCopyKey.selfieReviewTitle)), findsOneWidget);
       expect(source.events.where((event) => event == 'frame'), hasLength(3));
@@ -102,11 +143,7 @@ void main() {
         'liveness_video',
         'selfie',
       ]);
-      expect(uploads.take(3).map((r) => r.fields['gesture']), [
-        'blink',
-        'smile',
-        'turn_right',
-      ]);
+      expect(uploads.take(3).map((r) => r.fields['gesture']), gestures);
       for (final upload in uploads) {
         expect(upload.fields['capture_source'], 'camera');
         expect(
@@ -131,7 +168,7 @@ void main() {
         (facial['metadata']['liveness_results'] as List).map(
           (e) => e['challenge'],
         ),
-        ['blink', 'smile', 'turn_right'],
+        gestures,
       );
       expect(facial['metadata']['face_detection']['face_count'], 1);
 
@@ -165,6 +202,16 @@ void main() {
       expect(find.text(copy(SpecCopyKey.receiptSelfie)), findsOneWidget);
       expect(find.text(copy(SpecCopyKey.receiptLocation)), findsOneWidget);
       expect(submitted, isNotNull);
+      final keyed = backend.requests
+          .where(
+            (r) => r.path.contains('/uploads/') || r.path.endsWith('/submit'),
+          )
+          .toList();
+      expect(keyed, hasLength(7));
+      for (final request in keyed) {
+        expect(request.key, matches(uuid));
+      }
+      expect(keyed.map((r) => r.key).toSet(), hasLength(7));
     },
   );
 
@@ -195,7 +242,7 @@ void main() {
     await tester.pump();
     sources.last.play('position_ok_pass');
     await tester.pump();
-    sources.last.play('blink_timeout');
+    sources.last.play('${challengeGestures().first}_timeout');
     await tester.pumpAndSettle();
     expect(find.text(copy(SpecCopyKey.livenessTimeout)), findsOneWidget);
     expect(sources.last.events, contains('dispose'));
@@ -215,7 +262,7 @@ void main() {
     tester,
   ) async {
     final backend = Backend()
-      ..rejectLocation = true
+      ..locationRejection = fixture('reference-rejection')
       ..sessions.add(withRequirements(['location_verification']));
     final location = FakeLocationSource([() => locationFix()]);
     await tester.pumpWidget(
@@ -254,11 +301,232 @@ void main() {
       ),
       findsOneWidget,
     );
+    expect(find.text(copy(SpecCopyKey.locationRetry)), findsOneWidget);
+    await tapText(tester, copy(SpecCopyKey.locationRetry));
+    await tester.pumpAndSettle();
+    await tapText(tester, copy(SpecCopyKey.locationSend));
+    await tester.pumpAndSettle();
+    final keys = backend.requests
+        .where((r) => r.path.endsWith('/submit'))
+        .map((r) => r.key)
+        .toList();
+    expect(keys, hasLength(2));
+    expect(keys, everyElement(matches(uuid)));
+    expect(keys.first, isNot(keys.last));
+  });
+
+  testWidgets('a server accuracy rejection asks for a more precise fix', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..locationRejection = fixture('location-rejection')
+      ..sessions.add(withRequirements(['location_verification']));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CredflareVerification(
+          autoStart: true,
+          onClose: () {},
+          httpClient: backend.client,
+          sessionProvider: () async => descriptor(),
+          locationSource: FakeLocationSource([() => locationFix()]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapText(tester, copy(SpecCopyKey.locationShare));
+    await tester.pumpAndSettle();
+    await tapText(tester, copy(SpecCopyKey.locationSend));
+    await tester.pumpAndSettle();
     expect(
-      fixture('reference-rejection')['message'],
-      referenceRejectionMessage,
+      fixture('location-rejection')['code'],
+      SpecErrorCode.locationAccuracy,
+    );
+    expect(
+      find.text(copy(SpecCopyKey.locationPlaceNotPrecise)),
+      findsOneWidget,
+    );
+    expect(
+      find.text(fixture('location-rejection')['message'] as String),
+      findsNothing,
     );
     expect(find.text(copy(SpecCopyKey.locationRetry)), findsOneWidget);
+  });
+
+  testWidgets('an expired challenge on submit starts over with a new one', (
+    tester,
+  ) async {
+    final rejection = fixture('reference-rejection')
+      ..['message'] = 'The liveness challenge has expired.'
+      ..['code'] = SpecErrorCode.livenessChallengeExpired;
+    final backend = Backend()
+      ..facialRejection = rejection
+      ..sessions.add(withRequirements(['facial_verification']));
+    final sources = <FakeLivenessSource>[];
+    await tester.pumpWidget(facialApp(backend, sources));
+    await tester.pumpAndSettle();
+    await recordChallenge(tester, () => sources.last);
+    await tapText(tester, copy(SpecCopyKey.selfieSend));
+    await tester.pumpAndSettle();
+    expect(find.text(copy(SpecCopyKey.livenessExpired)), findsOneWidget);
+    expect(find.text(rejection['message'] as String), findsNothing);
+    final first = backend.requests.map((r) => r.key).whereType<String>();
+    final firstKeys = first.toSet();
+    await recordChallenge(
+      tester,
+      () => sources.last,
+      button: SpecCopyKey.livenessRetry,
+    );
+    expect(backend.challenges, 2);
+    await tapText(tester, copy(SpecCopyKey.selfieSend));
+    await tester.pumpAndSettle();
+    final secondUploads = backend.requests
+        .where((r) => r.path.endsWith('/uploads/biometrics'))
+        .skip(5)
+        .toList();
+    expect(secondUploads, hasLength(5));
+    for (final upload in secondUploads) {
+      expect(
+        upload.fields['challenge_id'],
+        '01a1fb33-a1ee-71b2-bba9-9f484aa3bb12',
+      );
+      expect(firstKeys, isNot(contains(upload.key)));
+    }
+    final submits = backend.requests
+        .where((r) => r.path.endsWith('/submit'))
+        .toList();
+    expect(submits, hasLength(2));
+    expect(submits.first.key, isNot(submits.last.key));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('each location rejection code shows its own copy', (
+    tester,
+  ) async {
+    final cases = {
+      SpecErrorCode.locationAccuracy: copy(SpecCopyKey.locationPlaceNotPrecise),
+      SpecErrorCode.locationStale: copy(SpecCopyKey.locationStale),
+      SpecErrorCode.locationMock: copy(SpecCopyKey.locationMockDetected),
+      SpecErrorCode.locationIpCountry: copy(
+        SpecCopyKey.locationIpCountryMismatch,
+      ),
+      SpecErrorCode.locationReferenceNotMatched: copy(
+        SpecCopyKey.locationPlaceNotMatchedWithin,
+        {'place': 'Head office'},
+      ),
+      'location.future_rule': 'A rule the SDK does not know yet.',
+    };
+    for (final entry in cases.entries) {
+      final rejection = fixture('location-rejection')
+        ..['code'] = entry.key
+        ..['message'] = 'A rule the SDK does not know yet.';
+      final backend = Backend()
+        ..locationRejection = rejection
+        ..sessions.add(withRequirements(['location_verification']));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CredflareVerification(
+            key: ValueKey(entry.key),
+            autoStart: true,
+            onClose: () {},
+            httpClient: backend.client,
+            sessionProvider: () async => descriptor(),
+            locationSource: FakeLocationSource([() => locationFix()]),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapText(tester, copy(SpecCopyKey.locationShare));
+      await tester.pumpAndSettle();
+      await tapText(tester, copy(SpecCopyKey.locationSend));
+      await tester.pumpAndSettle();
+      expect(find.text(entry.value), findsOneWidget, reason: entry.key);
+      expect(find.text(copy(SpecCopyKey.locationRetry)), findsOneWidget);
+    }
+  });
+
+  testWidgets('every challenge rejection code asks for a new challenge', (
+    tester,
+  ) async {
+    for (final code in [
+      SpecErrorCode.livenessChallengeExpired,
+      SpecErrorCode.livenessChallengeInvalid,
+      SpecErrorCode.livenessChallengeUsed,
+      SpecErrorCode.livenessFrameOutOfWindow,
+    ]) {
+      final backend = Backend()
+        ..facialRejection = (fixture('reference-rejection')
+          ..['code'] = code
+          ..['message'] = 'Server wording')
+        ..sessions.add(withRequirements(['facial_verification']));
+      final sources = <FakeLivenessSource>[];
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(facialApp(backend, sources));
+      await tester.pumpAndSettle();
+      await recordChallenge(tester, () => sources.last);
+      await tapText(tester, copy(SpecCopyKey.selfieSend));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(copy(SpecCopyKey.livenessExpired)),
+        findsOneWidget,
+        reason: code,
+      );
+      await tapText(tester, copy(SpecCopyKey.livenessRetry));
+      await tester.pump();
+      await tester.pump();
+      expect(backend.challenges, 2, reason: code);
+    }
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('other liveness rejections show the server message', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..facialRejection = (fixture('reference-rejection')
+        ..['code'] = SpecErrorCode.livenessVideoTooLong
+        ..['message'] = 'The video is too long. Record it again.')
+      ..sessions.add(withRequirements(['facial_verification']));
+    final sources = <FakeLivenessSource>[];
+    await tester.pumpWidget(facialApp(backend, sources));
+    await tester.pumpAndSettle();
+    await recordChallenge(tester, () => sources.last);
+    await tapText(tester, copy(SpecCopyKey.selfieSend));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('The video is too long. Record it again.'),
+      findsOneWidget,
+    );
+    expect(find.text(copy(SpecCopyKey.livenessRetry)), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a dropped submit is retried with the same request key', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..dropNextSubmit = true
+      ..sessions.add(withRequirements(['facial_verification']));
+    final sources = <FakeLivenessSource>[];
+    await tester.pumpWidget(facialApp(backend, sources));
+    await tester.pumpAndSettle();
+    await recordChallenge(tester, () => sources.last);
+    await tapText(tester, copy(SpecCopyKey.selfieSend));
+    await tester.pumpAndSettle();
+    expect(find.text(copy(SpecCopyKey.errorsSendSelfieFailed)), findsOneWidget);
+    await tapText(tester, copy(SpecCopyKey.selfieSend));
+    await tester.pumpAndSettle();
+    final submits = backend.requests
+        .where((r) => r.path.endsWith('/submit'))
+        .toList();
+    expect(submits, hasLength(2));
+    expect(submits.first.key, matches(uuid));
+    expect(submits.last.key, submits.first.key);
+    expect(
+      backend.requests.where((r) => r.path.contains('/uploads/')),
+      hasLength(5),
+    );
+    expect(backend.challenges, 1);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('a mocked location is refused before it is sent', (tester) async {

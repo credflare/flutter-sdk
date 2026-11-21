@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
+import 'spec.generated.dart';
 
 class SessionDescriptor {
   final String id;
@@ -30,7 +31,9 @@ class CredflareException implements Exception {
   final String message;
   final int status;
   final Object? errors;
-  CredflareException(this.message, this.status, [this.errors]);
+  final String? code;
+  CredflareException(this.message, this.status, [this.errors, this.code]);
+  bool get hasKnownCode => SpecErrorCode.meanings.containsKey(code);
   String get type => status == 0
       ? 'network'
       : status == 401
@@ -122,6 +125,9 @@ class CredflareSession {
             : 'Invalid response.',
         response.statusCode,
         envelope is Map ? envelope['errors'] : null,
+        envelope is Map && envelope['code'] is String
+            ? envelope['code'] as String
+            : null,
       );
     }
     return envelope['data'];

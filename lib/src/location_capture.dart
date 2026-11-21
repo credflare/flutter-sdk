@@ -8,9 +8,6 @@ import 'spec.generated.dart';
 import 'theme.dart';
 import 'ui.dart';
 
-const referenceRejectionMessage =
-    'Your location does not meet the place requirement for this verification.';
-
 enum _Phase { consent, locating, found, sending }
 
 class CredflareLocationCapture extends StatefulWidget {
@@ -152,20 +149,35 @@ class _LocationState extends State<CredflareLocationCapture> {
   }
 
   String _rejection(Object error) {
-    final reference = widget.settings.reference;
     if (error is! CredflareException || error.status == 0) {
       return copy(SpecCopyKey.errorsSendLocationFailed);
     }
-    if (error.status == 422 &&
-        error.message == referenceRejectionMessage &&
-        reference != null &&
-        reference.labels.isNotEmpty) {
-      return copy(
-        reference.rule == 'outside'
-            ? SpecCopyKey.locationPlaceNotMatchedOutside
-            : SpecCopyKey.locationPlaceNotMatchedWithin,
-        {'place': reference.labels.join(', ')},
-      );
+    final reference = widget.settings.reference;
+    switch (error.code) {
+      case SpecErrorCode.locationReferenceNotMatched:
+        if (reference == null || reference.labels.isEmpty) {
+          return copy(SpecCopyKey.locationPlaceRejected, {
+            'verifier': _verifier,
+          });
+        }
+        return copy(
+          reference.rule == 'outside'
+              ? SpecCopyKey.locationPlaceNotMatchedOutside
+              : SpecCopyKey.locationPlaceNotMatchedWithin,
+          {'place': reference.labels.join(', ')},
+        );
+      case SpecErrorCode.locationMock:
+        return copy(SpecCopyKey.locationMockDetected);
+      case SpecErrorCode.locationStale:
+        return copy(SpecCopyKey.locationStale);
+      case SpecErrorCode.locationIpCountry:
+        return copy(SpecCopyKey.locationIpCountryMismatch);
+      case SpecErrorCode.locationAccuracy:
+        return copy(
+          reference != null
+              ? SpecCopyKey.locationPlaceNotPrecise
+              : SpecCopyKey.locationLowAccuracy,
+        );
     }
     return error.message;
   }

@@ -12,6 +12,9 @@ import '../test/support/backend.dart';
 import '../test/support/fakes.dart';
 import '../test/support/fixtures.dart';
 
+final gestures = (fixture('liveness-challenge')['data']['gestures'] as List)
+    .cast<String>();
+
 Future<void> _loadFonts() async {
   final ubuntu = FontLoader('packages/credflare_sdk/Ubuntu');
   for (final weight in ['Regular', 'Medium', 'Bold']) {
@@ -190,7 +193,7 @@ void main() {
           await tester.pump();
           source.play('position_ok_pass');
           await tester.pump();
-          source.play('blink_pass');
+          source.play('${gestures.first}_pass');
           await tester.pump();
         },
       );
@@ -214,9 +217,7 @@ void main() {
           await tester.pump();
           for (final name in [
             'position_ok_pass',
-            'blink_pass',
-            'smile_pass',
-            'turn_right_pass',
+            for (final gesture in gestures) '${gesture}_pass',
           ]) {
             source.play(name);
             await tester.pump();
@@ -254,7 +255,7 @@ void main() {
     });
     testWidgets('location rejected$suffix', (tester) {
       final backend = Backend()
-        ..rejectLocation = true
+        ..locationRejection = fixture('reference-rejection')
         ..sessions.add(withRequirements(['location_verification']));
       return shoot(
         tester,

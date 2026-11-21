@@ -124,5 +124,6 @@ class RecordedRequest {
   final String path;
   final Map<String, String> fields;
   final String? body;
-  RecordedRequest(this.method, this.path, this.fields, this.body);
+  final String? key;
+  RecordedRequest(this.method, this.path, this.fields, this.body, this.key);
 }
