@@ -1,6 +1,8 @@
 library;
 
 export 'src/client.dart';
+export 'src/contact_code_capture.dart';
+export 'src/conditions.dart';
 export 'src/copy.dart';
 export 'src/document_capture.dart';
 export 'src/session_controller.dart';
@@ -11,6 +13,8 @@ export 'src/liveness_engine.dart';
 export 'src/liveness_source.dart';
 export 'src/location_capture.dart';
 export 'src/location_source.dart';
+export 'src/questionnaire.dart';
+export 'src/rejection.dart';
 export 'src/requirements.dart';
 export 'src/spec.generated.dart';
 export 'src/spec_icon.dart';

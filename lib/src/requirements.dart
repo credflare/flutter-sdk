@@ -106,4 +106,24 @@ List<VerificationRequirement> verificationRequirements(
     ),
 ];
 
-const sdkVerificationTypes = ['facial_verification', 'location_verification'];
+const sdkVerificationTypes = [
+  'facial_verification',
+  'location_verification',
+  'email_verification',
+  'phone_verification',
+];
+
+/// The refresh rule: a session still needs the applicant while its status is
+/// open and any outstanding list is non empty.
+bool sessionOutstanding(Map<String, dynamic> info) {
+  if (!SpecRequirements.refreshOpenStatuses.contains(info['status'])) {
+    return false;
+  }
+  return SpecRequirements.refreshOutstanding.any((path) {
+    Object? value = info;
+    for (final segment in path.split('.')) {
+      value = value is Map ? value[segment] : null;
+    }
+    return value is List && value.isNotEmpty;
+  });
+}

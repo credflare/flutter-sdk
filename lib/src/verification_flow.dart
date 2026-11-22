@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'capture_plan.dart';
 import 'client.dart';
+import 'contact_code_capture.dart';
 import 'copy.dart';
 import 'document_capture.dart';
 import 'liveness_capture.dart';
 import 'liveness_source.dart';
 import 'location_capture.dart';
 import 'location_source.dart';
+import 'questionnaire.dart';
 import 'requirements.dart';
 import 'spec.generated.dart';
 import 'spec_icon.dart';
@@ -82,6 +84,7 @@ class _VerificationState extends State<CredflareVerification> {
   bool _pendingReceipt = false;
   String? _error;
   final _received = <String>[];
+  final _answers = <String, Object?>{};
 
   @override
   void initState() {
@@ -105,15 +108,11 @@ class _VerificationState extends State<CredflareVerification> {
 
   Map? get _profile => _info?['profile'] as Map?;
 
-  bool get _allReceived {
-    final profile = _profile;
-    return _info != null &&
-        profile != null &&
-        !_pendingReceipt &&
-        (profile['document_requirements'] as List? ?? []).isEmpty &&
-        (profile['form_schema'] as List? ?? []).isEmpty &&
-        (profile['verification_requirements'] as List? ?? []).isEmpty;
-  }
+  bool get _allReceived =>
+      _info != null &&
+      _profile != null &&
+      !_pendingReceipt &&
+      !sessionOutstanding(_info!);
 
   Future<void> _start() async {
     if (_loading) return;
@@ -176,7 +175,9 @@ class _VerificationState extends State<CredflareVerification> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _error = _errorMessage(error, SpecCopyKey.errorsRefreshFailed);
+          _error = error is CredflareException && error.status == 401
+              ? copy(SpecCopyKey.errorsSessionExpired)
+              : copy(SpecCopyKey.errorsRefreshFailed);
         });
       }
     } finally {
@@ -338,9 +339,11 @@ class _VerificationState extends State<CredflareVerification> {
     final sdkStep = pending
         .where((item) => sdkVerificationTypes.contains(item.type))
         .firstOrNull;
+    final questions = formQuestions(_info);
+    final askQuestions = questions.isNotEmpty && canAskQuestions(questions);
     final hostSteps =
         profile == null ||
-        (profile['form_schema'] as List? ?? []).isNotEmpty ||
+        (questions.isNotEmpty && !askQuestions) ||
         pending.any((item) => !sdkVerificationTypes.contains(item.type));
     final verifier = verifierName(_info);
     final message = _info?['custom_message'] as String?;
@@ -391,7 +394,13 @@ class _VerificationState extends State<CredflareVerification> {
         const SizedBox(height: 24),
         FilledButton(
           onPressed: _refresh,
-          child: Text(copy(SpecCopyKey.sendingCheckAgain)),
+          child: Text(
+            copy(
+              _error == null
+                  ? SpecCopyKey.sendingCheckAgain
+                  : SpecCopyKey.commonTryAgain,
+            ),
+          ),
         ),
       ];
     }
@@ -416,6 +425,46 @@ class _VerificationState extends State<CredflareVerification> {
               _refresh(copy(SpecCopyKey.receiptDocument, {'document': name})),
           onBusyChanged: _busy,
           onDirtyChanged: (dirty) => _captureDirty = dirty,
+        ),
+      ];
+    }
+    if (docs.isEmpty && askQuestions) {
+      return [
+        CredflareQuestionnaire(
+          key: ValueKey(questions.map((q) => q['key']).join(',')),
+          session: _session!,
+          info: _info!,
+          earlierAnswers: _answers,
+          onSubmitted: (fields) {
+            _answers.addAll(fields);
+            _refresh(copy(SpecCopyKey.receiptAnswers));
+          },
+          onBusyChanged: _busy,
+        ),
+      ];
+    }
+    final channel = sdkStep == null
+        ? null
+        : ContactChannel.forType(sdkStep.type);
+    if (docs.isEmpty && channel != null) {
+      return [
+        CredflareContactCodeCapture(
+          key: ValueKey(channel),
+          session: _session!,
+          info: _info!,
+          channel: channel,
+          onSubmitted: () => _refresh(
+            copy(
+              channel == ContactChannel.email
+                  ? SpecCopyKey.receiptEmail
+                  : SpecCopyKey.receiptPhone,
+            ),
+          ),
+          onLeave: () {
+            widget.onCancelled?.call();
+            widget.onClose();
+          },
+          onBusyChanged: _busy,
         ),
       ];
     }
@@ -474,18 +523,23 @@ class _VerificationState extends State<CredflareVerification> {
         const SizedBox(height: 10),
         for (final doc in section.items) _card(doc, verifier),
       ],
-      if (_nextSteps(pending, hostSteps) case final next?) ...[
+      if (_nextSteps(pending, hostSteps, askQuestions) case final next?) ...[
         const SizedBox(height: 8),
         CredflareBody(copy(next), small: true),
       ],
     ];
   }
 
-  String? _nextSteps(List<VerificationRequirement> pending, bool hostSteps) {
-    final order = <String>{
-      for (final item in pending)
-        if (sdkVerificationTypes.contains(item.type)) item.type,
-    }.toList();
+  String? _nextSteps(
+    List<VerificationRequirement> pending,
+    bool hostSteps,
+    bool questions,
+  ) {
+    const capture = ['facial_verification', 'location_verification'];
+    if (questions || pending.any((item) => !capture.contains(item.type))) {
+      return SpecCopyKey.documentsHostStepsNext;
+    }
+    final order = <String>{for (final item in pending) item.type}.toList();
     return switch (order) {
       ['facial_verification'] => SpecCopyKey.documentsSelfieNext,
       ['location_verification'] => SpecCopyKey.documentsLocationNext,
