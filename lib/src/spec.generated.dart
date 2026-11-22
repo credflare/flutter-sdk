@@ -1,9 +1,9 @@
 // GENERATED FILE, DO NOT EDIT.
-// Source: credflare sdk-spec 1.1.0 (b32704f91552). Regenerate with scripts/generate.mjs.
+// Source: credflare sdk-spec 1.1.0 (6824e65d1864). Regenerate with scripts/generate.mjs.
 // ignore_for_file: type=lint
 
 const String credflareSpecVersion = '1.1.0';
-const String credflareSpecHash = 'b32704f91552';
+const String credflareSpecHash = '6824e65d1864';
 
 /// One step of a gesture. value and holdFrames name a threshold key.
 final class SpecGestureStep {
@@ -620,8 +620,16 @@ abstract final class SpecCopy {
     'questions.invalid_email': 'Enter a valid email address.',
     'questions.invalid_phone': 'Enter a valid phone number.',
     'questions.text_too_long': 'Use at most 5000 characters.',
+    'handoff.action': 'Continue on your phone',
+    'handoff.title': 'Continue on your phone',
+    'handoff.body': 'Scan this code with your phone camera to carry on there. The code works once and expires in {minutes} minutes.',
+    'handoff.expired': 'This code has expired.',
+    'handoff.new_code': 'Show a new code',
+    'handoff.link_invalid': 'This link has expired or was already used. Open a new one on the device where you started.',
     'rejection.requested_by': 'Requested by {verifier}.',
     'rejection.help': 'If you need help, contact {verifier}.',
+    'rejection.help_email': 'If you need help, contact {verifier} at {help_email}.',
+    'rejection.help_url': 'If you need help, visit {help_url}.',
     'rejection.action.retry': 'Try again',
     'rejection.action.restart': 'Start again',
     'rejection.action.reenter_code': 'Enter the code again',
@@ -894,8 +902,16 @@ abstract final class SpecCopyKey {
   static const String questionsInvalidEmail = 'questions.invalid_email';
   static const String questionsInvalidPhone = 'questions.invalid_phone';
   static const String questionsTextTooLong = 'questions.text_too_long';
+  static const String handoffAction = 'handoff.action';
+  static const String handoffTitle = 'handoff.title';
+  static const String handoffBody = 'handoff.body';
+  static const String handoffExpired = 'handoff.expired';
+  static const String handoffNewCode = 'handoff.new_code';
+  static const String handoffLinkInvalid = 'handoff.link_invalid';
   static const String rejectionRequestedBy = 'rejection.requested_by';
   static const String rejectionHelp = 'rejection.help';
+  static const String rejectionHelpEmail = 'rejection.help_email';
+  static const String rejectionHelpUrl = 'rejection.help_url';
   static const String rejectionActionRetry = 'rejection.action.retry';
   static const String rejectionActionRestart = 'rejection.action.restart';
   static const String rejectionActionReenterCode = 'rejection.action.reenter_code';
@@ -1028,6 +1044,8 @@ abstract final class SpecErrorCode {
 abstract final class SpecRejection {
   static const String requestedBy = 'rejection.requested_by';
   static const String help = 'rejection.help';
+  static const String helpEmail = 'rejection.help_email';
+  static const String helpUrl = 'rejection.help_url';
   static const List<String> actions = [
     'retry',
     'restart',
