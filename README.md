@@ -1,6 +1,6 @@
 # CredFlare Flutter SDK
 
-Development package for scoped applicant sessions and native collection of documents, a liveness challenge with selfie, and location on Android and iOS. Requires the scoped-session backend changes. This package is not published.
+Development package for scoped applicant sessions and native collection of documents, questionnaires, email and phone confirmation, a liveness challenge with selfie, and location on Android and iOS. Requires the scoped-session backend changes. This package is not published.
 
 ```sh
 flutter pub get
@@ -47,7 +47,9 @@ The client also submits requested form fields, liveness evidence and coordinates
 
 `CredflareSessionController(provider: ...)` loads a descriptor from your authenticated backend and exposes `session`, `info`, `loading` and `error`. Concurrent `load()` calls share one operation. The provider must keep the same verification case when renewing access. Dispose the controller when leaving the flow.
 
-A rejected capture throws `CredflareException` with status 422 and a stable `code` from `SpecErrorCode` (for example `location.stale` or `liveness.challenge_expired`). Match on `code` and show your own copy; `message` is for people and may change. A code the SDK does not know yet is kept as the raw string and `hasKnownCode` is false. The guided screens map each code to spec copy, and a liveness challenge code starts over with a new challenge.
+`requestContactCode(channel, destination)` sends a code to an email address or phone number and returns the masked destination, expiry, resend time and sends remaining. `confirmContactCode(channel, code)` confirms it. `submitAnswers(fields, key: ...)` sends questionnaire answers as a `form_submission`. Use `questionVisible(question, answers)` to decide whether a question with `show_if` is shown; send no answer for a hidden question.
+
+A rejected request throws `CredflareException` with status 422 and a stable `code` from `SpecErrorCode` (for example `location.stale`, `liveness.challenge_expired` or `phone.code_invalid`). Match on `code`; `message` is for people and may change. A code the SDK does not know yet is kept as the raw string and `hasKnownCode` is false. `Rejection.from(error, info: info)` reads the title, message and action for a code from the spec rejection map, fills the verifier name from the session, and falls back to the server message with a retry for a missing or unknown code. `CredflareRejection` shows it with who asked for the evidence and where to get help.
 
 A 401 means the session is unavailable. Ask the host backend whether it can issue a replacement. `replaceSession` updates the temporary credential while retaining the client object. `cancel()` revokes that session while preserving the verification case. Dispose clients with `close()` when no longer needed.
 
@@ -75,11 +77,19 @@ Synthetic front and back PNGs are in the sibling JavaScript SDK at `test/fixture
 
 ## Liveness and location steps
 
-Choose the compliance profile on your server when creating the case. The recipient does not choose a profile or verification mode. After the outstanding documents, the SDK runs the remaining facial and location requirements itself, in profile order, and shows a receipt only when everything required has been received. Form steps still return control to the host app.
+Choose the compliance profile on your server when creating the case. The recipient does not choose a profile or verification mode. After the outstanding documents, the SDK asks the outstanding questions, then runs the remaining facial, location, email and phone requirements itself, in profile order. After every submission or code confirmation it loads the session again: it continues while the session is open and anything is outstanding, including a requirement a workflow added during the case, and shows the receipt otherwise. If that check fails it offers a retry and never shows the receipt in its place. A questionnaire with a `founders` question returns control to the host app.
+
+## Questionnaire
+
+Text, long text, number, date, email, phone, single and multiple choice, country and consent questions are supported. Questions with `show_if` appear and disappear as answers change; hidden questions are not checked and not sent. Answers are checked against the spec limits before they are sent, and server messages for a question are shown under it. The country list shows ISO 3166 codes with their flags.
+
+## Email and phone confirmation
+
+The applicant enters an address or an international number, receives a code, and types it in. Sending a new code is enabled at the resend time from the server, and the screen shows how many codes remain. Every `email.*` and `phone.*` rejection shows its spec screen: a wrong code clears the field, an expired or burnt code sends a new one, a resend that is too soon waits for the resend time, and a send limit or missing sender lets the applicant leave.
 
 The facial step asks the server for a challenge, shows a mirrored front camera preview with positioning hints, runs the server's gestures in order with a timeout for each, keeps a JPEG frame when each gesture completes, records a video without audio over the challenge window when the profile asks for one, then takes the selfie. The applicant reviews the selfie before the frames, video and selfie are uploaded and submitted. A timeout or failure offers a retry that requests a new challenge. Face signals come from ML Kit face detection through a `FaceSignalProvider`, so another provider can be swapped in. Pass `livenessSource` to `CredflareVerification` to replace the camera source.
 
-The location step explains what is shared and, when the profile names reference places, which place by label. It asks for permission, takes a high accuracy fix and retries until the fix meets the profile's accuracy and age limits. It reports whether the platform flagged the fix as mocked and shows the server's reason when a location is rejected. The SDK never calls geocoding or IP lookup services. Pass `locationSource` to replace the location source.
+The location step explains what is shared and, when the profile names reference places, which place by label. It asks for permission, takes a high accuracy fix and retries until the fix meets the profile's accuracy and age limits. It reports whether the platform flagged the fix as mocked and shows the spec rejection screen when a location is rejected. The SDK never calls geocoding or IP lookup services. Pass `locationSource` to replace the location source.
 
 ### Permissions
 
