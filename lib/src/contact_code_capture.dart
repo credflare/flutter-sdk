@@ -36,7 +36,7 @@ class CredflareContactCodeCapture extends StatefulWidget {
   final Map<String, dynamic> info;
   final ContactChannel channel;
   final VoidCallback onSubmitted;
-  final VoidCallback onLeave;
+  final ValueChanged<String?> onLeave;
   final ValueChanged<bool> onBusyChanged;
   final DateTime Function() now;
   const CredflareContactCodeCapture({
@@ -231,7 +231,7 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
     if (rejected == null) return;
     switch (rejected.action) {
       case 'leave':
-        widget.onLeave();
+        widget.onLeave(rejected.code);
       case 'new_code':
       case 'wait':
         _send(_sentTo ?? _validDestination());

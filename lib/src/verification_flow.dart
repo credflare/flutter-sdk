@@ -23,6 +23,10 @@ class CredflareVerification extends StatefulWidget {
   final VoidCallback onClose;
   final void Function(Map<String, dynamic> session)? onSubmitted;
   final VoidCallback? onCancelled;
+
+  /// Called with the rejection code when nothing more can be done in the app
+  /// and the host has to act, for example when codes cannot be sent.
+  final ValueChanged<String?>? onHostActionRequired;
   final bool autoStart;
   final http.Client? httpClient;
   final LivenessSourceFactory livenessSource;
@@ -33,6 +37,7 @@ class CredflareVerification extends StatefulWidget {
     required this.onClose,
     this.onSubmitted,
     this.onCancelled,
+    this.onHostActionRequired,
     this.autoStart = false,
     this.httpClient,
     this.livenessSource = CameraLivenessSource.new,
@@ -82,6 +87,7 @@ class _VerificationState extends State<CredflareVerification> {
   bool _captureBusy = false;
   bool _captureDirty = false;
   bool _pendingReceipt = false;
+  bool _closed = false;
   String? _error;
   final _received = <String>[];
   final _answers = <String, Object?>{};
@@ -112,7 +118,7 @@ class _VerificationState extends State<CredflareVerification> {
       _info != null &&
       _profile != null &&
       !_pendingReceipt &&
-      !sessionOutstanding(_info!);
+      (_closed || !sessionOutstanding(_info!));
 
   Future<void> _start() async {
     if (_loading) return;
@@ -173,6 +179,15 @@ class _VerificationState extends State<CredflareVerification> {
       });
       if (_allReceived) widget.onSubmitted?.call(info);
     } catch (error) {
+      if (error is CredflareException && error.status == 409) {
+        if (!mounted) return;
+        setState(() {
+          _closed = true;
+          _pendingReceipt = false;
+        });
+        widget.onSubmitted?.call(_info!);
+        return;
+      }
       if (mounted) {
         setState(() {
           _error = error is CredflareException && error.status == 401
@@ -460,8 +475,8 @@ class _VerificationState extends State<CredflareVerification> {
                   : SpecCopyKey.receiptPhone,
             ),
           ),
-          onLeave: () {
-            widget.onCancelled?.call();
+          onLeave: (code) {
+            widget.onHostActionRequired?.call(code);
             widget.onClose();
           },
           onBusyChanged: _busy,
