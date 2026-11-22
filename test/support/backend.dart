@@ -26,6 +26,8 @@ class Backend {
   Map<String, dynamic>? facialRejection;
   var dropNextSubmit = false;
   var failNextGet = false;
+  Map<String, dynamic>? closedAfterSubmit;
+  var _submitted = false;
   final codeRejections = <Map<String, dynamic>>[];
   final confirmRejections = <Map<String, dynamic>>[];
   Map<String, dynamic>? formRejection;
@@ -48,6 +50,9 @@ class Backend {
     if (request.method == 'GET' && failNextGet) {
       failNextGet = false;
       throw http.ClientException('Connection reset', request.url);
+    }
+    if (request.method == 'GET' && _submitted && closedAfterSubmit != null) {
+      return http.Response(jsonEncode(closedAfterSubmit), 409);
     }
     if (request.method == 'GET') {
       final next = sessions.length > 1 ? sessions.removeAt(0) : sessions.first;
@@ -72,6 +77,10 @@ class Backend {
       }, root: root);
       raw['data']['id'] = nextFileId++;
       return http.Response(jsonEncode(raw), 201);
+    }
+    if (request.method == 'POST' &&
+        (path.endsWith('/submit') || path.endsWith('-codes/confirm'))) {
+      _submitted = true;
     }
     if (path.endsWith('-codes/confirm')) {
       if (confirmRejections.isNotEmpty) {

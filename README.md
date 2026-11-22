@@ -77,7 +77,7 @@ Synthetic front and back PNGs are in the sibling JavaScript SDK at `test/fixture
 
 ## Liveness and location steps
 
-Choose the compliance profile on your server when creating the case. The recipient does not choose a profile or verification mode. After the outstanding documents, the SDK asks the outstanding questions, then runs the remaining facial, location, email and phone requirements itself, in profile order. After every submission or code confirmation it loads the session again: it continues while the session is open and anything is outstanding, including a requirement a workflow added during the case, and shows the receipt otherwise. If that check fails it offers a retry and never shows the receipt in its place. A questionnaire with a `founders` question returns control to the host app.
+Choose the compliance profile on your server when creating the case. The recipient does not choose a profile or verification mode. After the outstanding documents, the SDK asks the outstanding questions, then runs the remaining facial, location, email and phone requirements itself, in profile order. After every submission or code confirmation it loads the session again: it continues while the session is open and anything is outstanding, including a requirement a workflow added during the case, and shows the receipt otherwise. If that check answers 409, the case is closed (for example a workflow approved it after the last step) and the receipt is shown. Any other failure offers a retry and never shows the receipt in its place. A questionnaire with a `founders` question returns control to the host app.
 
 ## Questionnaire
 
@@ -85,7 +85,7 @@ Text, long text, number, date, email, phone, single and multiple choice, country
 
 ## Email and phone confirmation
 
-The applicant enters an address or an international number, receives a code, and types it in. Sending a new code is enabled at the resend time from the server, and the screen shows how many codes remain. Every `email.*` and `phone.*` rejection shows its spec screen: a wrong code clears the field, an expired or burnt code sends a new one, a resend that is too soon waits for the resend time, and a send limit or missing sender lets the applicant leave.
+The applicant enters an address or an international number, receives a code, and types it in. Sending a new code is enabled at the resend time from the server, and the screen shows how many codes remain. Every `email.*` and `phone.*` rejection shows its spec screen: a wrong code clears the field, an expired or burnt code sends a new one, a resend that is too soon waits for the resend time, and a send limit or missing sender lets the applicant leave. Leaving that way calls `onHostActionRequired` with the rejection code before `onClose`, so the host app can follow up.
 
 The facial step asks the server for a challenge, shows a mirrored front camera preview with positioning hints, runs the server's gestures in order with a timeout for each, keeps a JPEG frame when each gesture completes, records a video without audio over the challenge window when the profile asks for one, then takes the selfie. The applicant reviews the selfie before the frames, video and selfie are uploaded and submitted. A timeout or failure offers a retry that requests a new challenge. Face signals come from ML Kit face detection through a `FaceSignalProvider`, so another provider can be swapped in. Pass `livenessSource` to `CredflareVerification` to replace the camera source.
 

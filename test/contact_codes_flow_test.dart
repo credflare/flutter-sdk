@@ -29,10 +29,15 @@ Map<String, dynamic> doneSession() {
 String verifier() =>
     fixture('requirement-added-session')['data']['requester']['name'] as String;
 
-Widget flow(Backend backend, {VoidCallback? onClose}) => MaterialApp(
+Widget flow(
+  Backend backend, {
+  VoidCallback? onClose,
+  ValueChanged<String?>? onHostActionRequired,
+}) => MaterialApp(
   home: CredflareVerification(
     autoStart: true,
     onClose: onClose ?? () {},
+    onHostActionRequired: onHostActionRequired,
     httpClient: backend.client,
     sessionProvider: () async => descriptor(),
   ),
@@ -135,6 +140,34 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('a case closed by the last confirmation shows the receipt', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.add(contactSession('phone_verification'))
+      ..closedAfterSubmit = fixture('session-closed');
+    Map<String, dynamic>? submitted;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CredflareVerification(
+          autoStart: true,
+          onClose: () {},
+          onSubmitted: (info) => submitted = info,
+          httpClient: backend.client,
+          sessionProvider: () async => descriptor(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await sendDestination(tester, ContactChannel.phone, '+237650000001');
+    await confirmCode(tester, '123456');
+    expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+    expect(find.text(copy(SpecCopyKey.receiptPhone)), findsOneWidget);
+    expect(find.text(copy(SpecCopyKey.errorsRefreshFailed)), findsNothing);
+    expect(submitted, isNotNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('an email address is checked before a code is sent', (
     tester,
   ) async {
@@ -187,8 +220,15 @@ void main() {
           backend.confirmRejections.add(rejection);
         }
         var closed = 0;
+        final hostActions = <String?>[];
         await tester.pumpWidget(const SizedBox());
-        await tester.pumpWidget(flow(backend, onClose: () => closed++));
+        await tester.pumpWidget(
+          flow(
+            backend,
+            onClose: () => closed++,
+            onHostActionRequired: hostActions.add,
+          ),
+        );
         await tester.pumpAndSettle();
         await sendDestination(
           tester,
@@ -233,6 +273,7 @@ void main() {
             await tester.tap(button);
             await settle(tester);
             expect(closed, 1, reason: code);
+            expect(hostActions, [code]);
           case 'new_code':
             await tapText(tester, label);
             await settle(tester);
@@ -282,7 +323,7 @@ void main() {
             info: info,
             channel: ContactChannel.phone,
             onSubmitted: () {},
-            onLeave: () {},
+            onLeave: (_) {},
             onBusyChanged: (_) {},
             now: now,
           ),

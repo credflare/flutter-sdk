@@ -6,7 +6,7 @@ Date: 2026-11-22. Host: macOS 26.3, Apple Silicon. Flutter 3.41.9, Dart 3.11.5, 
 | --- | --- |
 | Spec drift check (`sh scripts/check-spec.sh`) | Generated file and fixtures match the spec |
 | Static analysis | Passed |
-| Unit and widget tests (`flutter test`) | 158 passed |
+| Unit and widget tests (`flutter test`) | 159 passed |
 | Example flow test | Passed |
 | Screenshot tool (`flutter test tool/doc_screens_test.dart`) | 19 screens rendered, light and dark |
 | Android debug APK build | Passed |
@@ -20,7 +20,7 @@ Date: 2026-11-22. Host: macOS 26.3, Apple Silicon. Flutter 3.41.9, Dart 3.11.5, 
 
 - All 62 backend `show_if` cases in the spec are replayed through the condition evaluator and must give the server's result.
 - Widget tests drive the questionnaire through the guided flow: hidden questions are not shown, not checked and not sent, answers are checked against their limits, and a server rejection marks the question. After the answers are sent, the session is loaded again and a phone step that a workflow added is shown.
-- Every `email.*` and `phone.*` rejection fixture shows its spec title, message, requester and help line, and its action: entering the code again, sending a new code, waiting for the resend time, or leaving. Every `liveness.*` and `location.*` rejection shows its spec screen. An unknown or missing code shows the server message with a retry. The help line uses the requester's help address, then its help page, then its name, from the captured help contact session. A failed session check after sending never shows the receipt.
+- Every `email.*` and `phone.*` rejection fixture shows its spec title, message, requester and help line, and its action: entering the code again, sending a new code, waiting for the resend time, or leaving. Every `liveness.*` and `location.*` rejection shows its spec screen. An unknown or missing code shows the server message with a retry. The help line uses the requester's help address, then its help page, then its name, from the captured help contact session. A failed session check after sending never shows the receipt, while a 409 from a case closed by its last step does. Leaving after a send limit or missing sender reports the rejection code to the host.
 
 ## Android emulator
 
