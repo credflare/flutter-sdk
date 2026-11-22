@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'client.dart';
 import 'copy.dart';
 import 'location_source.dart';
+import 'rejection.dart';
 import 'requirements.dart';
 import 'spec.generated.dart';
 import 'theme.dart';
@@ -36,6 +37,7 @@ class _LocationState extends State<CredflareLocationCapture> {
   _Phase _phase = _Phase.consent;
   LocationFix? _fix;
   String? _error;
+  Rejection? _rejected;
   String? _progress;
   int _failures = 0;
   String _submitKey = requestKey();
@@ -66,6 +68,7 @@ class _LocationState extends State<CredflareLocationCapture> {
     if (_phase == _Phase.locating || _phase == _Phase.sending) return;
     setState(() {
       _phase = _Phase.locating;
+      _rejected = null;
       _error = null;
       _progress = copy(SpecCopyKey.locationWaiting);
     });
@@ -143,44 +146,22 @@ class _LocationState extends State<CredflareLocationCapture> {
       final rejected = error is CredflareException && error.status == 422;
       setState(() {
         _phase = rejected ? _Phase.consent : _Phase.found;
-        _error = _rejection(error);
+        _rejected = rejected
+            ? Rejection.from(
+                error,
+                info: widget.info,
+                reference: widget.settings.reference,
+              )
+            : null;
+        _error = rejected ? null : _sendError(error);
       });
     }
   }
 
-  String _rejection(Object error) {
-    if (error is! CredflareException || error.status == 0) {
-      return copy(SpecCopyKey.errorsSendLocationFailed);
-    }
-    final reference = widget.settings.reference;
-    switch (error.code) {
-      case SpecErrorCode.locationReferenceNotMatched:
-        if (reference == null || reference.labels.isEmpty) {
-          return copy(SpecCopyKey.locationPlaceRejected, {
-            'verifier': _verifier,
-          });
-        }
-        return copy(
-          reference.rule == 'outside'
-              ? SpecCopyKey.locationPlaceNotMatchedOutside
-              : SpecCopyKey.locationPlaceNotMatchedWithin,
-          {'place': reference.labels.join(', ')},
-        );
-      case SpecErrorCode.locationMock:
-        return copy(SpecCopyKey.locationMockDetected);
-      case SpecErrorCode.locationStale:
-        return copy(SpecCopyKey.locationStale);
-      case SpecErrorCode.locationIpCountry:
-        return copy(SpecCopyKey.locationIpCountryMismatch);
-      case SpecErrorCode.locationAccuracy:
-        return copy(
-          reference != null
-              ? SpecCopyKey.locationPlaceNotPrecise
-              : SpecCopyKey.locationLowAccuracy,
-        );
-    }
-    return error.message;
-  }
+  String _sendError(Object error) =>
+      error is CredflareException && error.status != 0
+      ? error.message
+      : copy(SpecCopyKey.errorsSendLocationFailed);
 
   String _title() {
     final reference = widget.settings.reference;
@@ -214,6 +195,9 @@ class _LocationState extends State<CredflareLocationCapture> {
   }
 
   List<Widget> _consent(ThemeData theme) {
+    if (_rejected case final rejected?) {
+      return [CredflareRejection(rejection: rejected, onAction: _locate)];
+    }
     final need = _need();
     return [
       const CredflareGlyph(SpecIcons.location),
