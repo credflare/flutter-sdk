@@ -25,6 +25,10 @@ class Backend {
   Map<String, dynamic>? locationRejection;
   Map<String, dynamic>? facialRejection;
   var dropNextSubmit = false;
+  var failNextGet = false;
+  final codeRejections = <Map<String, dynamic>>[];
+  final confirmRejections = <Map<String, dynamic>>[];
+  Map<String, dynamic>? formRejection;
   late final MockClient client = MockClient((request) async {
     final path = request.url.path;
     final fields = path.contains('/uploads/')
@@ -35,10 +39,16 @@ class Backend {
         request.method,
         path,
         fields,
-        path.endsWith('/submit') ? request.body : null,
+        path.endsWith('/submit') || path.contains('-codes')
+            ? request.body
+            : null,
         request.headers['X-Idempotency-Key'],
       ),
     );
+    if (request.method == 'GET' && failNextGet) {
+      failNextGet = false;
+      throw http.ClientException('Connection reset', request.url);
+    }
     if (request.method == 'GET') {
       final next = sessions.length > 1 ? sessions.removeAt(0) : sessions.first;
       return http.Response(jsonEncode(next), 200);
@@ -63,6 +73,25 @@ class Backend {
       raw['data']['id'] = nextFileId++;
       return http.Response(jsonEncode(raw), 201);
     }
+    if (path.endsWith('-codes/confirm')) {
+      if (confirmRejections.isNotEmpty) {
+        return http.Response(jsonEncode(confirmRejections.removeAt(0)), 422);
+      }
+      return http.Response(
+        jsonEncode(fixture('email-code-confirm', root: root)),
+        201,
+      );
+    }
+    if (path.endsWith('-codes')) {
+      if (codeRejections.isNotEmpty) {
+        return http.Response(jsonEncode(codeRejections.removeAt(0)), 422);
+      }
+      final channel = path.endsWith('/phone-codes') ? 'phone' : 'email';
+      return http.Response(
+        jsonEncode(fixture('$channel-code-request', root: root)),
+        202,
+      );
+    }
     if (dropNextSubmit) {
       dropNextSubmit = false;
       throw http.ClientException('Connection reset', request.url);
@@ -73,6 +102,16 @@ class Backend {
         : null;
     if (rejection != null) {
       return http.Response(jsonEncode(rejection), 422);
+    }
+    if (type == 'form_submission') {
+      final rejected = formRejection;
+      formRejection = null;
+      return rejected != null
+          ? http.Response(jsonEncode(rejected), 422)
+          : http.Response(
+              jsonEncode(fixture('questionnaire-submission', root: root)),
+              201,
+            );
     }
     final facial = type == 'facial_verification' ? facialRejection : null;
     if (facial != null) {
