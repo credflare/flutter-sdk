@@ -221,8 +221,13 @@ void main() {
         final sends = posts(backend, '-codes').length;
         switch (entry.action) {
           case 'wait':
-            expect(tester.widget<FilledButton>(button).onPressed, isNull);
-            expect(find.textContaining(resendPrefix()), findsOneWidget);
+            final at = DateTime.parse(rejection['resend_available_at']);
+            expect(DateTime.now().isAfter(at), isTrue);
+            expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
+            expect(find.textContaining(resendPrefix()), findsNothing);
+            await tester.tap(button);
+            await settle(tester);
+            expect(posts(backend, '-codes').length, sends + 1, reason: code);
           case 'leave':
             await tester.ensureVisible(button);
             await tester.tap(button);
@@ -258,13 +263,15 @@ void main() {
     });
   }
 
-  testWidgets('a wait rejection enables a new code at the resend time', (
-    tester,
+  Future<void> waitScreen(
+    WidgetTester tester,
+    Map<String, dynamic> rejection,
+    DateTime Function() now,
+    Backend backend,
   ) async {
-    var now = DateTime.utc(2026, 11, 22, 12);
-    final backend = Backend()
+    backend
       ..sessions.add(contactSession('phone_verification'))
-      ..codeRejections.add(fixture('rejections/phone.resend_too_soon'));
+      ..codeRejections.add(rejection);
     final session = CredflareSession(descriptor(), client: backend.client);
     final info = await session.get();
     await tester.pumpWidget(
@@ -277,26 +284,30 @@ void main() {
             onSubmitted: () {},
             onLeave: () {},
             onBusyChanged: (_) {},
-            now: () => now,
+            now: now,
           ),
         ),
       ),
     );
     await sendDestination(tester, ContactChannel.phone, '+237650000001');
+  }
+
+  testWidgets('a wait rejection enables a new code at its resend time', (
+    tester,
+  ) async {
+    final rejection = fixture('rejections/phone.resend_too_soon');
+    final at = DateTime.parse(rejection['resend_available_at'] as String);
+    var now = at.subtract(const Duration(seconds: 45));
+    final backend = Backend();
+    await waitScreen(tester, rejection, () => now, backend);
     final label = copy(SpecRejection.actionLabels['wait']!);
     final button = find.widgetWithText(FilledButton, label);
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
     expect(
-      find.text(
-        copy(SpecCopyKey.contactCodeResendIn, {
-          'seconds': SpecRequirements.contactCodesResendSeconds,
-        }),
-      ),
+      find.text(copy(SpecCopyKey.contactCodeResendIn, {'seconds': 45})),
       findsOneWidget,
     );
-    now = now.add(
-      const Duration(seconds: SpecRequirements.contactCodesResendSeconds),
-    );
+    now = at;
     await tester.pump(const Duration(seconds: 1));
     expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
     await tapText(tester, label);
@@ -306,38 +317,19 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a wait rejection counts down to its own resend time', (
+  testWidgets('a wait rejection without a resend time waits the full delay', (
     tester,
   ) async {
+    final rejection = fixture('rejections/phone.resend_too_soon')
+      ..remove('resend_available_at');
     final now = DateTime.utc(2026, 11, 22, 12);
-    final rejection = {
-      ...fixture('rejections/phone.resend_too_soon'),
-      'resend_available_at': now
-          .add(const Duration(seconds: 20))
-          .toIso8601String(),
-    };
-    final backend = Backend()
-      ..sessions.add(contactSession('phone_verification'))
-      ..codeRejections.add(rejection);
-    final session = CredflareSession(descriptor(), client: backend.client);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CredflareContactCodeCapture(
-            session: session,
-            info: await session.get(),
-            channel: ContactChannel.phone,
-            onSubmitted: () {},
-            onLeave: () {},
-            onBusyChanged: (_) {},
-            now: () => now,
-          ),
-        ),
-      ),
-    );
-    await sendDestination(tester, ContactChannel.phone, '+237650000001');
+    await waitScreen(tester, rejection, () => now, Backend());
     expect(
-      find.text(copy(SpecCopyKey.contactCodeResendIn, {'seconds': 20})),
+      find.text(
+        copy(SpecCopyKey.contactCodeResendIn, {
+          'seconds': SpecRequirements.contactCodesResendSeconds,
+        }),
+      ),
       findsOneWidget,
     );
     await tester.pumpWidget(const SizedBox());
