@@ -436,6 +436,10 @@ class CredflareQuestionnaire extends StatefulWidget {
   /// Called instead of sending when the answers show a question of a type
   /// this SDK cannot ask, so the host app asks the questions.
   final VoidCallback? onUnsupported;
+
+  /// Called instead of [onSubmitted] when the answers are refused because the
+  /// case closed, so none of them were recorded.
+  final VoidCallback? onClosed;
   const CredflareQuestionnaire({
     super.key,
     required this.session,
@@ -444,6 +448,7 @@ class CredflareQuestionnaire extends StatefulWidget {
     required this.onBusyChanged,
     this.earlierAnswers = const {},
     this.onUnsupported,
+    this.onClosed,
   });
   @override
   State<CredflareQuestionnaire> createState() => _QuestionnaireState();
@@ -476,7 +481,7 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
       final value = _earlier[key];
       switch (_type(q)) {
         case 'consent':
-          _values[key] = value == true;
+          if (value is bool) _values[key] = value;
         case 'multi_select':
           if (value is List) _values[key] = {for (final v in value) '$v'};
         case 'select' || 'single_select' || 'country' || 'date':
@@ -519,7 +524,7 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
     final key = q['key'] as String;
     switch (_type(q)) {
       case 'consent':
-        return _values[key] == true;
+        return _values[key] as bool?;
       case 'multi_select':
         final chosen = (_values[key] as Set<String>?) ?? {};
         return [
@@ -658,11 +663,12 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
       _validate(visible);
       _error = null;
     });
-    if (_errors.isNotEmpty) return;
-    if (_unsupportedShown && widget.onUnsupported != null) {
-      widget.onUnsupported!();
+    if (_unsupportedShown) {
+      setState(_errors.clear);
+      widget.onUnsupported?.call();
       return;
     }
+    if (_errors.isNotEmpty) return;
     final payload = jsonEncode(fields);
     if (_keyFor != null && _keyFor != payload) _key = requestKey();
     _keyFor = payload;
@@ -675,7 +681,11 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
     } catch (error) {
       widget.onBusyChanged(false);
       if (error is CredflareException && error.status == 409) {
-        widget.onSubmitted(fields);
+        if (widget.onClosed case final onClosed?) {
+          onClosed();
+        } else {
+          widget.onSubmitted(fields);
+        }
         return;
       }
       if (!mounted) return;
@@ -740,6 +750,22 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
             ),
           ),
         );
+
+  Widget? _clearable(Map<String, dynamic> q, bool enabled) {
+    final key = q['key'] as String;
+    if (q['required'] == true || _values[key] == null) return null;
+    return IconButton(
+      key: ValueKey('question-$key-clear'),
+      tooltip: copy(SpecCopyKey.questionsFoundersRemove),
+      icon: const Icon(Icons.close),
+      onPressed: enabled
+          ? () {
+              _values[key] = null;
+              _changed();
+            }
+          : null,
+    );
+  }
 
   Widget _field(ThemeData theme, Map<String, dynamic> q) {
     final key = q['key'] as String;
@@ -823,7 +849,9 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
                   hintText: copy(SpecCopyKey.questionsChooseCountry),
                   errorText: error,
                   enabled: enabled,
-                  suffixIcon: const Icon(Icons.arrow_drop_down),
+                  suffixIcon:
+                      _clearable(q, enabled) ??
+                      const Icon(Icons.arrow_drop_down),
                 ),
                 child: name == null
                     ? null
@@ -848,6 +876,14 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
               hint: Text(copy(SpecCopyKey.questionsChooseOne)),
               decoration: InputDecoration(errorText: error),
               items: [
+                if (q['required'] != true && _values[key] != null)
+                  DropdownMenuItem<String>(
+                    value: null,
+                    child: Text(
+                      copy(SpecCopyKey.questionsChooseOne),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 for (final item in options)
                   DropdownMenuItem(
                     value: item,
@@ -942,7 +978,10 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
               controller: controller,
               readOnly: true,
               enabled: enabled,
-              decoration: InputDecoration(errorText: error),
+              decoration: InputDecoration(
+                errorText: error,
+                suffixIcon: _clearable(q, enabled),
+              ),
               onTap: () async {
                 final initial = value != null && _realDate(value)
                     ? DateTime.parse(value)
@@ -1023,9 +1062,14 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
           KeyedSubtree(key: ValueKey('q-${q['key']}'), child: _field(theme, q)),
         ],
         if (_error != null) CredflareNotice(_error!),
+        if (_unsupportedShown && widget.onUnsupported == null)
+          CredflareNotice(copy(SpecCopyKey.receiptHostSteps)),
         const SizedBox(height: 32),
         FilledButton(
-          onPressed: _sending ? null : _send,
+          onPressed:
+              _sending || (_unsupportedShown && widget.onUnsupported == null)
+              ? null
+              : _send,
           child: Text(
             copy(
               _sending

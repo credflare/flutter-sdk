@@ -505,9 +505,11 @@ void main() {
     await tester.pumpWidget(flow(backend));
     await tester.pumpAndSettle();
     await answerRequired(tester);
+    final gets = backend.requests.where((r) => r.method == 'GET').length;
     await tapText(tester, copy(SpecCopyKey.questionsSend));
     expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
-    expect(find.text(copy(SpecCopyKey.receiptAnswers)), findsOneWidget);
+    expect(find.text(copy(SpecCopyKey.receiptAnswers)), findsNothing);
+    expect(backend.requests.where((r) => r.method == 'GET'), hasLength(gets));
   });
 
   testWidgets('the questionnaire on its own reads earlier answers from info', (
@@ -725,5 +727,191 @@ void main() {
     await tapText(tester, copy(SpecCopyKey.questionsSend));
     expect((lastSubmit(backend)['fields'] as Map)['country'], 'DE');
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('an optional consent left alone is not sent', (tester) async {
+    final session = questionnaireWith((schema) {
+      final terms = schema.firstWhere((q) => q['key'] == 'terms');
+      terms['required'] = false;
+      schema
+        ..clear()
+        ..addAll([
+          terms,
+          {
+            'key': 'why_not',
+            'label': 'Why not?',
+            'type': 'text',
+            'required': true,
+            'show_if': {
+              'conditions': [
+                {'path': 'form.terms', 'op': 'equals', 'value': false},
+              ],
+            },
+          },
+        ]);
+    });
+    final backend = Backend()
+      ..sessions.addAll([session, fixture('requirement-added-session')]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    expect(question('why_not'), findsNothing);
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(lastSubmit(backend)['fields'], <String, Object?>{});
+  });
+
+  testWidgets('a consent ticked and unticked again is sent as false', (
+    tester,
+  ) async {
+    final session = questionnaireWith((schema) {
+      schema.retainWhere((q) => q['key'] == 'terms');
+      schema.single['required'] = false;
+    });
+    final backend = Backend()
+      ..sessions.addAll([session, fixture('requirement-added-session')]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    await tapText(tester, consentLabel());
+    await tapText(tester, consentLabel());
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(lastSubmit(backend)['fields'], {'terms': false});
+  });
+
+  Map<String, dynamic> askedAgain(String key, Object answer) {
+    final session = questionnaireWith((schema) {
+      schema.retainWhere((q) => q['key'] == key);
+      schema.single['required'] = false;
+    });
+    session['data']['profile']['form_answers'] = {key: answer};
+    return session;
+  }
+
+  for (final (key, answer, shown) in [
+    ('birth_date', '1990-04-12', '1990-04-12'),
+    ('country', 'DE', 'Germany'),
+  ]) {
+    testWidgets('an optional $key asked again can be cleared', (tester) async {
+      final backend = Backend()
+        ..sessions.addAll([
+          askedAgain(key, answer),
+          fixture('requirement-added-session'),
+        ]);
+      await tester.pumpWidget(flow(backend));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: question(key),
+          matching: find.textContaining(shown),
+        ),
+        findsOneWidget,
+      );
+      final clear = find.byKey(ValueKey('question-$key-clear'));
+      expect(
+        find.descendant(
+          of: clear,
+          matching: find.byTooltip(copy(SpecCopyKey.questionsFoundersRemove)),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(clear);
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: question(key),
+          matching: find.textContaining(shown),
+        ),
+        findsNothing,
+      );
+      expect(clear, findsNothing);
+      await tapText(tester, copy(SpecCopyKey.questionsSend));
+      expect(lastSubmit(backend)['fields'], {key: null});
+    });
+  }
+
+  testWidgets('an optional single choice asked again can be cleared', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.addAll([
+        askedAgain('employment', 'Student'),
+        fixture('requirement-added-session'),
+      ]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    await choose(tester, 'employment', copy(SpecCopyKey.questionsChooseOne));
+    expect(
+      find.descendant(
+        of: question('employment'),
+        matching: find.text('Student'),
+      ),
+      findsNothing,
+    );
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(lastSubmit(backend)['fields'], {'employment': null});
+  });
+
+  testWidgets('a required answer offers no way to clear it', (tester) async {
+    final session = askedAgain('birth_date', '1990-04-12');
+    final schema = session['data']['profile']['form_schema'] as List;
+    schema.single['required'] = true;
+    final backend = Backend()..sessions.add(session);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('question-birth_date-clear')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('the questionnaire on its own never sends part of a form', (
+    tester,
+  ) async {
+    final session = questionnaireWith((schema) {
+      schema.firstWhere((q) => q['key'] == 'employer')['type'] = 'signature';
+    });
+    final backend = Backend()..sessions.add(session);
+    final client = CredflareSession(descriptor(), client: backend.client);
+    final info = await client.get();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: CredflareQuestionnaire(
+              session: client,
+              info: info,
+              onSubmitted: (_) {},
+              onBusyChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await answerRequired(tester);
+    await choose(tester, 'employment', 'Employed');
+    expect(find.text(copy(SpecCopyKey.receiptHostSteps)), findsOneWidget);
+    final send = find.widgetWithText(
+      FilledButton,
+      copy(SpecCopyKey.questionsSend),
+    );
+    expect(tester.widget<FilledButton>(send).onPressed, isNull);
+    await tester.tap(send, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(backend.requests.where((r) => r.path.endsWith('/submit')), isEmpty);
+  });
+
+  testWidgets('an unknown question goes to the host before blank answers', (
+    tester,
+  ) async {
+    final session = questionnaireWith((schema) {
+      schema.firstWhere((q) => q['key'] == 'employer')['type'] = 'signature';
+    });
+    final backend = Backend()..sessions.add(session);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    await choose(tester, 'employment', 'Employed');
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(backend.requests.where((r) => r.path.endsWith('/submit')), isEmpty);
+    expect(find.text(copy(SpecCopyKey.questionsTitle)), findsNothing);
+    expect(find.text(copy(SpecCopyKey.emailTitle)), findsOneWidget);
   });
 }
