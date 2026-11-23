@@ -108,6 +108,12 @@ int? _time(String s) {
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   if (hour > 24 || minute > 59 || second > 59) return null;
   if (hour == 24 && (minute > 0 || second > 0)) return null;
+  final zone = parts[9]!;
+  if (zone != 'Z' &&
+      (int.parse(zone.substring(1, 3)) > 23 ||
+          int.parse(zone.substring(4)) > 59)) {
+    return null;
+  }
   return DateTime.tryParse(iso)?.millisecondsSinceEpoch;
 }
 

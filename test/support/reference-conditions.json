@@ -235,5 +235,41 @@
       "a": "ΟΔΟΣ."
     },
     "expect": true
+  },
+  {
+    "name": "date offset minutes past 59 is not a date",
+    "condition": {
+      "path": "form.a",
+      "op": "lt",
+      "value": "2025-01-01"
+    },
+    "form": {
+      "a": "2025-01-01T00:00+01:75"
+    },
+    "expect": false
+  },
+  {
+    "name": "date offset hours past 23 is not a date",
+    "condition": {
+      "path": "form.a",
+      "op": "lt",
+      "value": "2025-01-01"
+    },
+    "form": {
+      "a": "2025-01-01T00:00+24:00"
+    },
+    "expect": false
+  },
+  {
+    "name": "date offset of 01:59 is applied",
+    "condition": {
+      "path": "form.a",
+      "op": "lt",
+      "value": "2025-01-01"
+    },
+    "form": {
+      "a": "2025-01-01T00:00+01:59"
+    },
+    "expect": true
   }
 ]
