@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:camera/camera.dart' show availableCameras;
 import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart' as files;
 import 'capture_plan.dart';
@@ -19,6 +20,10 @@ class CredflareDocumentCapture extends StatefulWidget {
   final void Function(bool busy)? onBusyChanged;
   final void Function(bool dirty)? onDirtyChanged;
   final String? requesterName;
+
+  /// Called instead of reporting an error when the submission is refused
+  /// because the case closed, so nothing was recorded.
+  final VoidCallback? onClosed;
   const CredflareDocumentCapture({
     super.key,
     required this.session,
@@ -29,6 +34,7 @@ class CredflareDocumentCapture extends StatefulWidget {
     this.onBusyChanged,
     this.onDirtyChanged,
     this.requesterName,
+    this.onClosed,
   });
   @override
   State<CredflareDocumentCapture> createState() => _DocumentCaptureState();
@@ -69,6 +75,14 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
     widget.onBusyChanged?.call(value);
   }
 
+  Future<bool> _hasCamera() async {
+    try {
+      return (await availableCameras()).isNotEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
   Future<void> _pick(CaptureStep step, String source) async {
     if (_busy) return;
     _setBusy(true);
@@ -78,6 +92,9 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
     try {
       files.XFile? selected;
       if (source == 'camera') {
+        if (!await _hasCamera()) {
+          throw StateError(copy(SpecCopyKey.errorsCameraUnavailable));
+        }
         selected = await ImagePicker().pickImage(
           source: ImageSource.camera,
           imageQuality: 95,
@@ -212,6 +229,12 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
       }, key: _submitKey);
       if (mounted) widget.onSubmitted(id);
     } catch (error) {
+      if (error is CredflareException &&
+          error.status == 409 &&
+          widget.onClosed != null) {
+        if (mounted) widget.onClosed!();
+        return;
+      }
       if (mounted) {
         setState(() {
           _error = error is CredflareException && error.status != 0

@@ -5,6 +5,7 @@ import 'client.dart';
 import 'copy.dart';
 import 'liveness_engine.dart';
 import 'liveness_source.dart';
+import 'rejection.dart';
 import 'requirements.dart';
 import 'spec.generated.dart';
 import 'spec_icon.dart';
@@ -21,6 +22,10 @@ class CredflareLivenessCapture extends StatefulWidget {
   final VoidCallback onSubmitted;
   final ValueChanged<bool> onBusyChanged;
   final DateTime Function() now;
+
+  /// Called instead of reporting an error when the submission is refused
+  /// because the case closed, so nothing was recorded.
+  final VoidCallback? onClosed;
   const CredflareLivenessCapture({
     super.key,
     required this.session,
@@ -30,6 +35,7 @@ class CredflareLivenessCapture extends StatefulWidget {
     required this.onSubmitted,
     required this.onBusyChanged,
     this.now = DateTime.now,
+    this.onClosed,
   });
   @override
   State<CredflareLivenessCapture> createState() => _LivenessState();
@@ -67,6 +73,7 @@ class _LivenessState extends State<CredflareLivenessCapture> {
   _Upload _videoUpload = _Upload(), _selfieUpload = _Upload();
   String _submitKey = requestKey();
   String? _error;
+  Rejection? _rejected;
   bool _canRetry = false;
 
   String get _verifier => verifierName(widget.info);
@@ -115,6 +122,7 @@ class _LivenessState extends State<CredflareLivenessCapture> {
     setState(() {
       _phase = _Phase.starting;
       _error = null;
+      _rejected = null;
       _index = 0;
       _status = PositionStatus.noFace;
       _faceLost = false;
@@ -332,30 +340,29 @@ class _LivenessState extends State<CredflareLivenessCapture> {
       widget.onSubmitted();
     } catch (error) {
       widget.onBusyChanged(false);
+      if (error is CredflareException &&
+          error.status == 409 &&
+          widget.onClosed != null) {
+        widget.onClosed!();
+        return;
+      }
       if (!mounted) return;
       final validation = error is CredflareException && error.status == 422;
       setState(() {
         _phase = validation ? _Phase.intro : _Phase.review;
         _canRetry = true;
-        _error = _sendError(error);
+        _rejected = validation
+            ? Rejection.from(error, info: widget.info)
+            : null;
+        _error = validation ? null : _sendError(error);
       });
     }
   }
 
-  String _sendError(Object error) {
-    if (error is! CredflareException || error.status == 0) {
-      return copy(SpecCopyKey.errorsSendSelfieFailed);
-    }
-    return switch (error.code) {
-      SpecErrorCode.livenessChallengeExpired ||
-      SpecErrorCode.livenessChallengeInvalid ||
-      SpecErrorCode.livenessChallengeUsed ||
-      SpecErrorCode.livenessFrameOutOfWindow => copy(
-        SpecCopyKey.livenessExpired,
-      ),
-      _ => error.message,
-    };
-  }
+  String _sendError(Object error) =>
+      error is CredflareException && error.status != 0
+      ? error.message
+      : copy(SpecCopyKey.errorsSendSelfieFailed);
 
   Widget _preview(BuildContext context) {
     final source = _source;
@@ -393,6 +400,13 @@ class _LivenessState extends State<CredflareLivenessCapture> {
   }
 
   List<Widget> _intro(ThemeData theme) => [
+    if (_rejected case final rejected?)
+      CredflareRejection(rejection: rejected, onAction: _start)
+    else
+      ..._introBody(theme),
+  ];
+
+  List<Widget> _introBody(ThemeData theme) => [
     const CredflareGlyph(SpecIcons.selfie),
     CredflareTitle(copy(SpecCopyKey.livenessTitle)),
     const SizedBox(height: 8),

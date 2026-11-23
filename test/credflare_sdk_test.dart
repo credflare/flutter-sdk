@@ -322,6 +322,84 @@ void main() {
     expect(missing.hasKnownCode, isFalse);
   });
 
+  test('requests and confirms contact codes and sends answers', () async {
+    final requests = <http.Request>[];
+    Map<String, dynamic> read(String name) =>
+        jsonDecode(File('test/fixtures/$name.json').readAsStringSync())
+            as Map<String, dynamic>;
+    final session = CredflareSession(
+      client.descriptor,
+      client: MockClient((request) async {
+        requests.add(request);
+        final path = request.url.path;
+        return path.endsWith('/phone-codes')
+            ? http.Response(jsonEncode(read('phone-code-request')), 202)
+            : path.endsWith('/email-codes')
+            ? http.Response(jsonEncode(read('email-code-request')), 202)
+            : path.endsWith('/confirm')
+            ? http.Response(jsonEncode(read('email-code-confirm')), 201)
+            : http.Response(jsonEncode(read('questionnaire-submission')), 201);
+      }),
+    );
+    final phone = await session.requestContactCode(
+      ContactChannel.phone,
+      '+237650000001',
+    );
+    final sample = read('phone-code-request')['data'];
+    expect(phone.channel, ContactChannel.phone);
+    expect(phone.destination, sample['destination']);
+    expect(phone.expiresAt, DateTime.parse(sample['expires_at']));
+    expect(
+      phone.resendAvailableAt,
+      DateTime.parse(sample['resend_available_at']),
+    );
+    expect(phone.sendsRemaining, sample['sends_remaining']);
+    final email = await session.requestContactCode(
+      ContactChannel.email,
+      'Jane.Doe@example.test',
+    );
+    expect(email.channel, ContactChannel.email);
+    final confirmed = await session.confirmContactCode(
+      ContactChannel.email,
+      '123456',
+    );
+    expect(confirmed['verified'], isTrue);
+    final key = requestKey();
+    final id = await session.submitAnswers({'employment': 'Student'}, key: key);
+    expect(id, read('questionnaire-submission')['data']['id']);
+    final base = '/api/v1/sdk/sessions/${client.descriptor.id}';
+    expect(requests.map((r) => r.url.path), [
+      '$base/phone-codes',
+      '$base/email-codes',
+      '$base/email-codes/confirm',
+      '$base/submit',
+    ]);
+    expect(jsonDecode(requests[0].body), {'phone': '+237650000001'});
+    expect(jsonDecode(requests[2].body), {'code': '123456'});
+    expect(jsonDecode(requests[3].body), {
+      'type': 'form_submission',
+      'fields': {'employment': 'Student'},
+    });
+    expect(requests[3].headers['X-Idempotency-Key'], key);
+    expect(requests[0].headers['X-Idempotency-Key'], isNull);
+    for (final r in requests) {
+      expect(r.headers['Authorization'], 'Bearer test-session-token');
+    }
+  });
+
+  test('reads the session status and outstanding lists', () {
+    Map<String, dynamic> read(String name) =>
+        jsonDecode(File('test/fixtures/$name.json').readAsStringSync())['data']
+            as Map<String, dynamic>;
+    expect(sessionOutstanding(read('questionnaire-session')), isTrue);
+    expect(sessionOutstanding(read('requirement-added-session')), isTrue);
+    final done = read('requirement-added-session');
+    done['profile']['verification_requirements'] = [];
+    expect(sessionOutstanding(done), isFalse);
+    final closed = read('questionnaire-session')..['status'] = 'submitted';
+    expect(sessionOutstanding(closed), isFalse);
+  });
+
   test('reads facial and location settings with reference labels', () {
     final info =
         jsonDecode(

@@ -32,7 +32,27 @@ class CredflareException implements Exception {
   final int status;
   final Object? errors;
   final String? code;
-  CredflareException(this.message, this.status, [this.errors, this.code]);
+  final DateTime? resendAvailableAt;
+
+  /// The masked address or number a waiting code went to, on a
+  /// `resend_too_soon` rejection.
+  final String? destination;
+
+  /// When the waiting code expires, on a `resend_too_soon` rejection.
+  final DateTime? expiresAt;
+
+  /// Codes that can still be sent, on a `resend_too_soon` rejection.
+  final int? sendsRemaining;
+  CredflareException(
+    this.message,
+    this.status, [
+    this.errors,
+    this.code,
+    this.resendAvailableAt,
+    this.destination,
+    this.expiresAt,
+    this.sendsRemaining,
+  ]);
   bool get hasKnownCode => SpecErrorCode.meanings.containsKey(code);
   String get type => status == 0
       ? 'network'
@@ -127,6 +147,18 @@ class CredflareSession {
         envelope is Map ? envelope['errors'] : null,
         envelope is Map && envelope['code'] is String
             ? envelope['code'] as String
+            : null,
+        envelope is Map && envelope['resend_available_at'] is String
+            ? DateTime.tryParse(envelope['resend_available_at'] as String)
+            : null,
+        envelope is Map && envelope['destination'] is String
+            ? envelope['destination'] as String
+            : null,
+        envelope is Map && envelope['expires_at'] is String
+            ? DateTime.tryParse(envelope['expires_at'] as String)
+            : null,
+        envelope is Map && envelope['sends_remaining'] is int
+            ? envelope['sends_remaining'] as int
             : null,
       );
     }
@@ -229,6 +261,32 @@ class CredflareSession {
   Future<int> submitLocation(LocationFix fix, {required String key}) =>
       submit(fix.toSubmission(), key: key);
 
+  Future<int> submitAnswers(
+    Map<String, Object?> fields, {
+    required String key,
+  }) => submit({'type': 'form_submission', 'fields': fields}, key: key);
+
+  Future<ContactCodeSent> requestContactCode(
+    ContactChannel channel,
+    String destination,
+  ) async {
+    final request = http.Request('POST', _url('/${channel.name}-codes'))
+      ..headers['Content-Type'] = 'application/json'
+      ..body = jsonEncode({channel.name: destination});
+    final data = await _send(request, keyed: false);
+    return ContactCodeSent.fromJson(Map<String, dynamic>.from(data as Map));
+  }
+
+  Future<Map<String, dynamic>> confirmContactCode(
+    ContactChannel channel,
+    String code,
+  ) async {
+    final request = http.Request('POST', _url('/${channel.name}-codes/confirm'))
+      ..headers['Content-Type'] = 'application/json'
+      ..body = jsonEncode({'code': code});
+    return Map<String, dynamic>.from(await _send(request, keyed: false) as Map);
+  }
+
   Future<void> cancel() async {
     await _send(http.Request('DELETE', _url()));
   }
@@ -236,6 +294,43 @@ class CredflareSession {
   void close() {
     if (_ownsClient) _http.close();
   }
+}
+
+enum ContactChannel {
+  email(SpecRequirements.contactCodesChannelsEmail),
+  phone(SpecRequirements.contactCodesChannelsPhone);
+
+  final String verificationType;
+  const ContactChannel(this.verificationType);
+
+  static ContactChannel? forType(String type) =>
+      values.where((c) => c.verificationType == type).firstOrNull;
+}
+
+class ContactCodeSent {
+  final ContactChannel channel;
+  final String destination;
+  final DateTime expiresAt;
+  final DateTime resendAvailableAt;
+  final int sendsRemaining;
+  const ContactCodeSent({
+    required this.channel,
+    required this.destination,
+    required this.expiresAt,
+    required this.resendAvailableAt,
+    required this.sendsRemaining,
+  });
+
+  factory ContactCodeSent.fromJson(Map<String, dynamic> json) =>
+      ContactCodeSent(
+        channel: ContactChannel.values.byName(json['channel'] as String),
+        destination: json['destination'] as String,
+        expiresAt: DateTime.parse(json['expires_at'] as String),
+        resendAvailableAt: DateTime.parse(
+          json['resend_available_at'] as String,
+        ),
+        sendsRemaining: (json['sends_remaining'] as num).toInt(),
+      );
 }
 
 enum BiometricUploadType {

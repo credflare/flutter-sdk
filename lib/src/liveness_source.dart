@@ -52,7 +52,7 @@ class CameraLivenessSource implements LivenessCaptureSource {
   bool _disposed = false;
 
   CameraLivenessSource({FaceSignalProvider? faceProvider})
-    : faceProvider = faceProvider ?? MlKitFaceSignalProvider();
+    : faceProvider = faceProvider ?? defaultFaceSignalProvider();
 
   @override
   String get provider => faceProvider.name;

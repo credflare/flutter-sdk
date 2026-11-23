@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'capture_plan.dart';
 import 'client.dart';
+import 'contact_code_capture.dart';
 import 'copy.dart';
 import 'document_capture.dart';
 import 'liveness_capture.dart';
 import 'liveness_source.dart';
 import 'location_capture.dart';
 import 'location_source.dart';
+import 'questionnaire.dart';
 import 'requirements.dart';
 import 'spec.generated.dart';
 import 'spec_icon.dart';
@@ -19,8 +21,20 @@ typedef SessionProvider = Future<SessionDescriptor> Function();
 class CredflareVerification extends StatefulWidget {
   final SessionProvider sessionProvider;
   final VoidCallback onClose;
+
+  /// Called with the session once everything the SDK can collect is sent.
+  /// Not called when the case closed, since no current session can be
+  /// fetched for a closed case; see [onClosed].
   final void Function(Map<String, dynamic> session)? onSubmitted;
+
+  /// Called when the case turned out to be closed after or during a
+  /// submission or code confirmation. The flow then shows the receipt.
+  final VoidCallback? onClosed;
   final VoidCallback? onCancelled;
+
+  /// Called with the rejection code when nothing more can be done in the app
+  /// and the host has to act, for example when codes cannot be sent.
+  final ValueChanged<String?>? onHostActionRequired;
   final bool autoStart;
   final http.Client? httpClient;
   final LivenessSourceFactory livenessSource;
@@ -30,7 +44,9 @@ class CredflareVerification extends StatefulWidget {
     required this.sessionProvider,
     required this.onClose,
     this.onSubmitted,
+    this.onClosed,
     this.onCancelled,
+    this.onHostActionRequired,
     this.autoStart = false,
     this.httpClient,
     this.livenessSource = CameraLivenessSource.new,
@@ -80,8 +96,12 @@ class _VerificationState extends State<CredflareVerification> {
   bool _captureBusy = false;
   bool _captureDirty = false;
   bool _pendingReceipt = false;
+  bool _closed = false;
   String? _error;
+  String? _leaveCode;
+  bool _questionsToHost = false;
   final _received = <String>[];
+  final _answers = <String, Object?>{};
 
   @override
   void initState() {
@@ -105,15 +125,11 @@ class _VerificationState extends State<CredflareVerification> {
 
   Map? get _profile => _info?['profile'] as Map?;
 
-  bool get _allReceived {
-    final profile = _profile;
-    return _info != null &&
-        profile != null &&
-        !_pendingReceipt &&
-        (profile['document_requirements'] as List? ?? []).isEmpty &&
-        (profile['form_schema'] as List? ?? []).isEmpty &&
-        (profile['verification_requirements'] as List? ?? []).isEmpty;
-  }
+  bool get _allReceived =>
+      _info != null &&
+      _profile != null &&
+      !_pendingReceipt &&
+      (_closed || !sessionOutstanding(_info!));
 
   Future<void> _start() async {
     if (_loading) return;
@@ -155,9 +171,10 @@ class _VerificationState extends State<CredflareVerification> {
   }
 
   Future<void> _refresh([String? received]) async {
-    if (_loading) return;
+    if (!mounted || _loading) return;
     if (received != null) _received.add(received);
     setState(() {
+      _leaveCode = null;
       _document = null;
       _captureDirty = false;
       _captureBusy = false;
@@ -174,9 +191,15 @@ class _VerificationState extends State<CredflareVerification> {
       });
       if (_allReceived) widget.onSubmitted?.call(info);
     } catch (error) {
+      if (error is CredflareException && error.status == 409) {
+        _closedCase();
+        return;
+      }
       if (mounted) {
         setState(() {
-          _error = _errorMessage(error, SpecCopyKey.errorsRefreshFailed);
+          _error = error is CredflareException && error.status == 401
+              ? copy(SpecCopyKey.errorsSessionExpired)
+              : copy(SpecCopyKey.errorsRefreshFailed);
         });
       }
     } finally {
@@ -186,6 +209,20 @@ class _VerificationState extends State<CredflareVerification> {
         });
       }
     }
+  }
+
+  void _closedCase() {
+    if (!mounted || _closed) return;
+    setState(() {
+      _closed = true;
+      _leaveCode = null;
+      _document = null;
+      _captureDirty = false;
+      _captureBusy = false;
+      _pendingReceipt = false;
+      _error = null;
+    });
+    widget.onClosed?.call();
   }
 
   Future<bool> _confirm({
@@ -245,7 +282,11 @@ class _VerificationState extends State<CredflareVerification> {
       stay: copy(SpecCopyKey.exitStay),
       leave: copy(SpecCopyKey.exitLeave),
     )) {
-      widget.onCancelled?.call();
+      if (_leaveCode case final code?) {
+        widget.onHostActionRequired?.call(code);
+      } else {
+        widget.onCancelled?.call();
+      }
       widget.onClose();
     }
   }
@@ -338,9 +379,15 @@ class _VerificationState extends State<CredflareVerification> {
     final sdkStep = pending
         .where((item) => sdkVerificationTypes.contains(item.type))
         .firstOrNull;
+    final questions = formQuestions(_info);
+    final earlier = {..._answers, ...formAnswers(_info)};
+    final askQuestions =
+        questions.isNotEmpty &&
+        !_questionsToHost &&
+        canAskQuestions(questions, earlier);
     final hostSteps =
         profile == null ||
-        (profile['form_schema'] as List? ?? []).isNotEmpty ||
+        (questions.isNotEmpty && !askQuestions) ||
         pending.any((item) => !sdkVerificationTypes.contains(item.type));
     final verifier = verifierName(_info);
     final message = _info?['custom_message'] as String?;
@@ -391,7 +438,13 @@ class _VerificationState extends State<CredflareVerification> {
         const SizedBox(height: 24),
         FilledButton(
           onPressed: _refresh,
-          child: Text(copy(SpecCopyKey.sendingCheckAgain)),
+          child: Text(
+            copy(
+              _error == null
+                  ? SpecCopyKey.sendingCheckAgain
+                  : SpecCopyKey.commonTryAgain,
+            ),
+          ),
         ),
       ];
     }
@@ -416,6 +469,51 @@ class _VerificationState extends State<CredflareVerification> {
               _refresh(copy(SpecCopyKey.receiptDocument, {'document': name})),
           onBusyChanged: _busy,
           onDirtyChanged: (dirty) => _captureDirty = dirty,
+          onClosed: _closedCase,
+        ),
+      ];
+    }
+    if (docs.isEmpty && askQuestions) {
+      return [
+        CredflareQuestionnaire(
+          key: ValueKey(questions.map((q) => q['key']).join(',')),
+          session: _session!,
+          info: _info!,
+          earlierAnswers: earlier,
+          onSubmitted: (fields) {
+            _answers.addAll(fields);
+            _refresh(copy(SpecCopyKey.receiptAnswers));
+          },
+          onBusyChanged: _busy,
+          onUnsupported: () => setState(() => _questionsToHost = true),
+          onClosed: _closedCase,
+        ),
+      ];
+    }
+    final channel = sdkStep == null
+        ? null
+        : ContactChannel.forType(sdkStep.type);
+    if (docs.isEmpty && channel != null) {
+      return [
+        CredflareContactCodeCapture(
+          key: ValueKey(channel),
+          session: _session!,
+          info: _info!,
+          channel: channel,
+          onSubmitted: () => _refresh(
+            copy(
+              channel == ContactChannel.email
+                  ? SpecCopyKey.receiptEmail
+                  : SpecCopyKey.receiptPhone,
+            ),
+          ),
+          onLeave: (code) {
+            widget.onHostActionRequired?.call(code);
+            widget.onClose();
+          },
+          onLeaveCodeChanged: (code) => _leaveCode = code,
+          onClosed: _closedCase,
+          onBusyChanged: _busy,
         ),
       ];
     }
@@ -428,6 +526,7 @@ class _VerificationState extends State<CredflareVerification> {
           sourceFactory: widget.livenessSource,
           onSubmitted: () => _refresh(copy(SpecCopyKey.receiptSelfie)),
           onBusyChanged: _busy,
+          onClosed: _closedCase,
         ),
       ];
     }
@@ -440,6 +539,7 @@ class _VerificationState extends State<CredflareVerification> {
           source: widget.locationSource,
           onSubmitted: () => _refresh(copy(SpecCopyKey.receiptLocation)),
           onBusyChanged: _busy,
+          onClosed: _closedCase,
         ),
       ];
     }
@@ -474,18 +574,23 @@ class _VerificationState extends State<CredflareVerification> {
         const SizedBox(height: 10),
         for (final doc in section.items) _card(doc, verifier),
       ],
-      if (_nextSteps(pending, hostSteps) case final next?) ...[
+      if (_nextSteps(pending, hostSteps, askQuestions) case final next?) ...[
         const SizedBox(height: 8),
         CredflareBody(copy(next), small: true),
       ],
     ];
   }
 
-  String? _nextSteps(List<VerificationRequirement> pending, bool hostSteps) {
-    final order = <String>{
-      for (final item in pending)
-        if (sdkVerificationTypes.contains(item.type)) item.type,
-    }.toList();
+  String? _nextSteps(
+    List<VerificationRequirement> pending,
+    bool hostSteps,
+    bool questions,
+  ) {
+    const capture = ['facial_verification', 'location_verification'];
+    if (questions || pending.any((item) => !capture.contains(item.type))) {
+      return SpecCopyKey.documentsHostStepsNext;
+    }
+    final order = <String>{for (final item in pending) item.type}.toList();
     return switch (order) {
       ['facial_verification'] => SpecCopyKey.documentsSelfieNext,
       ['location_verification'] => SpecCopyKey.documentsLocationNext,
@@ -525,22 +630,43 @@ class _VerificationState extends State<CredflareVerification> {
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          titleSpacing: CredflareTheme.gutter,
+          centerTitle: true,
+          titleSpacing: 8,
+          toolbarHeight: CredflareVerifierBar.toolbarHeight(
+            context,
+            name: requester?['name'] as String?,
+            logoUrl: requester?['logo_url'] as String?,
+            sandbox: _info?['environment'] == 'sandbox',
+            width:
+                MediaQuery.sizeOf(context).width -
+                2 * CredflareVerifierBar.sideWidth -
+                16,
+          ),
+          leadingWidth: CredflareVerifierBar.sideWidth,
+          leading: const SizedBox.shrink(),
           title: CredflareVerifierBar(
             name: requester?['name'] as String?,
             logoUrl: requester?['logo_url'] as String?,
             sandbox: _info?['environment'] == 'sandbox',
           ),
           actions: [
-            TextButton(
-              onPressed: _loading || _captureBusy
-                  ? null
-                  : allReceived
-                  ? widget.onClose
-                  : _leave,
-              child: Text(copy(SpecCopyKey.commonClose)),
+            SizedBox(
+              width: CredflareVerifierBar.sideWidth,
+              child: Center(
+                child: TextButton(
+                  onPressed: _loading || _captureBusy
+                      ? null
+                      : allReceived
+                      ? widget.onClose
+                      : _leave,
+                  child: Text(
+                    copy(SpecCopyKey.commonClose),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(width: 12),
           ],
         ),
         body: SafeArea(

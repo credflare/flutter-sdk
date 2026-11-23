@@ -83,6 +83,18 @@ class CredflareTheme {
           ),
         ),
       ),
+      inputDecorationTheme: InputDecorationTheme(
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radius),
+          borderSide: BorderSide(color: p['border']!),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(radius),
+          borderSide: BorderSide(color: p['border']!),
+        ),
+        errorMaxLines: 3,
+        helperMaxLines: 3,
+      ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(double.infinity, buttonHeight),
@@ -134,39 +146,103 @@ class CredflareVerifierBar extends StatelessWidget {
     this.logoUrl,
     this.sandbox = false,
   });
+
+  static const sideWidth = 88.0;
+  static const _nameStyle = TextStyle(
+    fontSize: 15,
+    fontWeight: FontWeight.w500,
+  );
+  static const _badgeStyle = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+  );
+
+  /// The toolbar height that fits the name on up to two lines and the badge
+  /// when the title has [width] to lay out in.
+  static double toolbarHeight(
+    BuildContext context, {
+    String? name,
+    String? logoUrl,
+    bool sandbox = false,
+    required double width,
+  }) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final base =
+        Theme.of(context).appBarTheme.titleTextStyle ??
+        Theme.of(context).textTheme.titleLarge ??
+        const TextStyle();
+    double measure(String text, TextStyle style, double maxWidth, int lines) {
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: base.merge(style)),
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+        maxLines: lines,
+      )..layout(maxWidth: maxWidth < 1 ? 1 : maxWidth);
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    var height = 0.0;
+    if (name != null) {
+      height += measure(
+        name,
+        _nameStyle,
+        width - (logoUrl != null ? 32 : 0),
+        2,
+      );
+    }
+    if (sandbox) {
+      height +=
+          (name != null ? 4 : 0) +
+          4 +
+          measure(copy(SpecCopyKey.commonTestMode), _badgeStyle, width, 1);
+    }
+    return height + 24 > kToolbarHeight ? height + 24 : kToolbarHeight;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final palette = theme.brightness == Brightness.dark
         ? CredflareTheme.dark
         : CredflareTheme.light;
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        if (logoUrl != null) ...[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Image.network(
-              logoUrl!,
-              width: 24,
-              height: 24,
-              fit: BoxFit.contain,
-              excludeFromSemantics: true,
-              errorBuilder: (_, _, _) => const SizedBox.shrink(),
-            ),
-          ),
-          const SizedBox(width: 8),
-        ],
-        if (name != null)
-          Flexible(
-            child: Text(
-              name!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
+        if (name != null || logoUrl != null)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (logoUrl != null) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Image.network(
+                    logoUrl!,
+                    width: 24,
+                    height: 24,
+                    fit: BoxFit.contain,
+                    excludeFromSemantics: true,
+                    errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (name != null)
+                Flexible(
+                  child: Text(
+                    name!,
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
+                    style: _nameStyle,
+                  ),
+                ),
+            ],
           ),
         if (sandbox) ...[
-          const SizedBox(width: 8),
+          if (name != null || logoUrl != null) const SizedBox(height: 4),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
@@ -175,11 +251,7 @@ class CredflareVerifierBar extends StatelessWidget {
             ),
             child: Text(
               copy(SpecCopyKey.commonTestMode),
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: palette['warningInk'],
-              ),
+              style: _badgeStyle.copyWith(color: palette['warningInk']),
             ),
           ),
         ],

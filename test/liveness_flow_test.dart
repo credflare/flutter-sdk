@@ -374,7 +374,7 @@ void main() {
     await recordChallenge(
       tester,
       () => sources.last,
-      button: SpecCopyKey.livenessRetry,
+      button: SpecRejection.actionLabels['restart']!,
     );
     expect(backend.challenges, 2);
     await tapText(tester, copy(SpecCopyKey.selfieSend));
@@ -444,72 +444,33 @@ void main() {
       await tapText(tester, copy(SpecCopyKey.locationSend));
       await tester.pumpAndSettle();
       expect(find.text(entry.value), findsOneWidget, reason: entry.key);
-      expect(find.text(rejection['message'] as String), findsNothing);
-      expect(find.text(copy(SpecCopyKey.locationRetry)), findsOneWidget);
-    }
-  });
-
-  testWidgets('every challenge rejection code asks for a new challenge', (
-    tester,
-  ) async {
-    for (final code in [
-      SpecErrorCode.livenessChallengeExpired,
-      SpecErrorCode.livenessChallengeInvalid,
-      SpecErrorCode.livenessChallengeUsed,
-      SpecErrorCode.livenessFrameOutOfWindow,
-    ]) {
-      final backend = Backend()
-        ..facialRejection = fixture('rejections/$code')
-        ..sessions.add(withRequirements(['facial_verification']));
-      final sources = <FakeLivenessSource>[];
-      await tester.pumpWidget(const SizedBox());
-      await tester.pumpWidget(facialApp(backend, sources));
-      await tester.pumpAndSettle();
-      await recordChallenge(tester, () => sources.last);
-      await tapText(tester, copy(SpecCopyKey.selfieSend));
-      await tester.pumpAndSettle();
       expect(
-        find.text(copy(SpecCopyKey.livenessExpired)),
+        find.text(copy(SpecRejection.codes[entry.key]!.title)),
         findsOneWidget,
-        reason: code,
+        reason: entry.key,
       );
+      expect(find.text(rejection['message'] as String), findsNothing);
       expect(
-        find.text(fixture('rejections/$code')['message'] as String),
-        findsNothing,
+        find.text(copy(SpecRejection.actionLabels['retry']!)),
+        findsOneWidget,
       );
-      await tapText(tester, copy(SpecCopyKey.livenessRetry));
-      await tester.pump();
-      await tester.pump();
-      expect(backend.challenges, 2, reason: code);
     }
-    await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('other liveness rejections show the server message', (
+  testWidgets('every liveness rejection shows its spec screen and restarts', (
     tester,
   ) async {
-    final codes = [
-      SpecErrorCode.livenessGestureMismatch,
-      SpecErrorCode.livenessNotCamera,
-      SpecErrorCode.livenessVideoMissing,
-      SpecErrorCode.livenessVideoTooLong,
-      SpecErrorCode.livenessVideoUnreadable,
-    ];
-    expect(
-      {
-        ...codes,
-        SpecErrorCode.livenessChallengeExpired,
-        SpecErrorCode.livenessChallengeInvalid,
-        SpecErrorCode.livenessChallengeUsed,
-        SpecErrorCode.livenessFrameOutOfWindow,
-      },
-      SpecErrorCode.meanings.keys
-          .where((c) => c.startsWith('liveness.'))
-          .toSet(),
-    );
+    final codes = SpecErrorCode.meanings.keys
+        .where((c) => c.startsWith('liveness.'))
+        .toList();
+    final verifier =
+        withRequirements(['facial_verification'])['data']['requester']['name']
+            as String;
     for (final code in codes) {
       final rejection = fixture('rejections/$code');
       expect(rejection['code'], code);
+      final entry = SpecRejection.codes[code]!;
+      expect(entry.action, 'restart', reason: code);
       final backend = Backend()
         ..facialRejection = rejection
         ..sessions.add(withRequirements(['facial_verification']));
@@ -520,13 +481,49 @@ void main() {
       await recordChallenge(tester, () => sources.last);
       await tapText(tester, copy(SpecCopyKey.selfieSend));
       await tester.pumpAndSettle();
+      expect(find.text(copy(entry.title)), findsOneWidget, reason: code);
+      expect(find.text(copy(entry.message)), findsOneWidget, reason: code);
+      expect(find.text(rejection['message'] as String), findsNothing);
       expect(
-        find.text(rejection['message'] as String),
+        find.text(copy(SpecRejection.requestedBy, {'verifier': verifier})),
         findsOneWidget,
-        reason: code,
       );
-      expect(find.text(copy(SpecCopyKey.livenessRetry)), findsOneWidget);
+      expect(
+        find.text(copy(SpecRejection.help, {'verifier': verifier})),
+        findsOneWidget,
+      );
       expect(backend.challenges, 1, reason: code);
+      await tapText(tester, copy(SpecRejection.actionLabels['restart']!));
+      await tester.pump();
+      await tester.pump();
+      expect(backend.challenges, 2, reason: code);
+    }
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('an unknown or missing code shows the server message', (
+    tester,
+  ) async {
+    for (final code in ['liveness.something_new', null]) {
+      final rejection = {
+        ...fixture('rejections/${SpecErrorCode.livenessNotCamera}'),
+        'code': code,
+      };
+      final backend = Backend()
+        ..facialRejection = rejection
+        ..sessions.add(withRequirements(['facial_verification']));
+      final sources = <FakeLivenessSource>[];
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(facialApp(backend, sources));
+      await tester.pumpAndSettle();
+      await recordChallenge(tester, () => sources.last);
+      await tapText(tester, copy(SpecCopyKey.selfieSend));
+      await tester.pumpAndSettle();
+      expect(find.text(rejection['message'] as String), findsOneWidget);
+      expect(
+        find.text(copy(SpecRejection.actionLabels['retry']!)),
+        findsOneWidget,
+      );
     }
     await tester.pumpWidget(const SizedBox());
   });
@@ -704,6 +701,11 @@ void main() {
     Future<void> show(List<String> types, {bool form = false}) async {
       final raw = withRequirements(types);
       final profile = raw['data']['profile'] as Map<String, dynamic>;
+      if (types.contains('phone_verification')) {
+        profile['verification_requirements'] = fixture(
+          'requirement-added-session',
+        )['data']['profile']['verification_requirements'];
+      }
       profile['document_requirements'] = fixture(
         'session',
       )['data']['profile']['document_requirements'];
@@ -742,8 +744,12 @@ void main() {
       }
     }
 
-    await show(['facial_verification', 'location_verification'], form: true);
+    await show(['facial_verification', 'location_verification']);
     only(copy(SpecCopyKey.documentsSelfieLocationNext));
+    await show(['facial_verification', 'location_verification'], form: true);
+    only(copy(SpecCopyKey.documentsHostStepsNext));
+    await show(['phone_verification']);
+    only(copy(SpecCopyKey.documentsHostStepsNext));
     await show(['location_verification']);
     only(copy(SpecCopyKey.documentsLocationNext));
     await show(['facial_verification']);
@@ -752,5 +758,66 @@ void main() {
     only(copy(SpecCopyKey.documentsHostStepsNext));
     await show([]);
     only(null);
+  });
+
+  testWidgets('a location refused because the case closed shows the receipt', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.add(withRequirements(['location_verification']))
+      ..closedAfterSubmit = fixture('session-closed')
+      ..closeOnPost = true;
+    var closed = 0;
+    Map<String, dynamic>? submitted;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CredflareVerification(
+          autoStart: true,
+          onClose: () {},
+          onClosed: () => closed++,
+          onSubmitted: (info) => submitted = info,
+          httpClient: backend.client,
+          sessionProvider: () async => descriptor(),
+          locationSource: FakeLocationSource([() => locationFix()]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapText(tester, copy(SpecCopyKey.locationShare));
+    await tester.pumpAndSettle();
+    await tapText(tester, copy(SpecCopyKey.locationSend));
+    await tester.pumpAndSettle();
+    expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+    expect(find.text(copy(SpecCopyKey.receiptLocation)), findsNothing);
+    expect(
+      find.text(fixture('session-closed')['message'] as String),
+      findsNothing,
+    );
+    expect(backend.requests.where((r) => r.method == 'GET'), hasLength(1));
+    expect(closed, 1);
+    expect(submitted, isNull);
+  });
+
+  testWidgets('a selfie refused because the case closed shows the receipt', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.add(withRequirements(['facial_verification']))
+      ..closedAfterSubmit = fixture('session-closed')
+      ..closeOnPost = true;
+    final sources = <FakeLivenessSource>[];
+    await tester.pumpWidget(facialApp(backend, sources));
+    await tester.pumpAndSettle();
+    await recordChallenge(tester, () => sources.last);
+    await tapText(tester, copy(SpecCopyKey.selfieSend));
+    await tester.pumpAndSettle();
+    expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+    expect(find.text(copy(SpecCopyKey.receiptSelfie)), findsNothing);
+    expect(
+      find.text(fixture('session-closed')['message'] as String),
+      findsNothing,
+    );
+    expect(backend.requests.where((r) => r.method == 'GET'), hasLength(1));
+    await tester.pumpWidget(const SizedBox());
   });
 }

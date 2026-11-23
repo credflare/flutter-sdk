@@ -1,9 +1,9 @@
 // GENERATED FILE, DO NOT EDIT.
-// Source: credflare sdk-spec 1.0.0 (ef15c85fc748). Regenerate with scripts/generate.mjs.
+// Source: credflare sdk-spec 1.1.0 (eb176f038a44). Regenerate with scripts/generate.mjs.
 // ignore_for_file: type=lint
 
-const String credflareSpecVersion = '1.0.0';
-const String credflareSpecHash = 'ef15c85fc748';
+const String credflareSpecVersion = '1.1.0';
+const String credflareSpecHash = 'eb176f038a44';
 
 /// One step of a gesture. value and holdFrames name a threshold key.
 final class SpecGestureStep {
@@ -24,6 +24,16 @@ final class SpecSetting {
   final List<String> options;
   final String? defaultJson;
   const SpecSetting({required this.path, required this.type, required this.optional, this.min, this.max, required this.options, this.defaultJson});
+}
+
+/// Applicant copy for a rejection code. Every text field is a copy key. The place messages replace message when the location requirement has reference places.
+final class SpecRejectionCopy {
+  final String title;
+  final String message;
+  final String action;
+  final String? placeMessageWithin;
+  final String? placeMessageOutside;
+  const SpecRejectionCopy({required this.title, required this.message, required this.action, this.placeMessageWithin, this.placeMessageOutside});
 }
 
 final class SpecPalette {
@@ -486,6 +496,9 @@ abstract final class SpecCopy {
     'receipt.document': '{document} received',
     'receipt.selfie': 'Selfie received',
     'receipt.location': 'Location received',
+    'receipt.email': 'Email address received',
+    'receipt.phone': 'Phone number received',
+    'receipt.answers': 'Answers received',
     'receipt.host_steps': 'The app will guide you through the remaining steps.',
     'receipt.done': 'Done',
     'selfie.title': 'Take a selfie',
@@ -567,6 +580,102 @@ abstract final class SpecCopy {
     'location.place.not_precise': 'Your location is not precise enough to check this place. Move near a window or outside, then try again.',
     'location.place.rejected': 'Your location does not match the place requested by {verifier}. Try again from the right place.',
     'location.place.retry': 'Try again',
+    'email.title': 'Confirm your email address',
+    'email.body': '{verifier} asks you to confirm an email address. We will send a short code to it.',
+    'email.label': 'Email address',
+    'email.placeholder': 'name@example.com',
+    'email.send': 'Send code',
+    'email.invalid': 'Enter a valid email address.',
+    'email.change': 'Use a different email address',
+    'email.change_after': 'You can use a different email address when the countdown ends.',
+    'phone.title': 'Confirm your phone number',
+    'phone.body': '{verifier} asks you to confirm a phone number. We will send a short code to it by text message.',
+    'phone.label': 'Phone number',
+    'phone.hint': 'Start with + and your country code, for example +44 7700 900123.',
+    'phone.send': 'Send code',
+    'phone.invalid': 'Enter the number in international format, starting with + and the country code.',
+    'phone.change': 'Use a different phone number',
+    'phone.change_after': 'You can use a different phone number when the countdown ends.',
+    'contact_code.sending': 'Sending a code…',
+    'contact_code.title': 'Enter the code',
+    'contact_code.body': 'We sent a code to {destination}. It expires in {minutes} minutes.',
+    'contact_code.label': 'Code',
+    'contact_code.confirm': 'Confirm',
+    'contact_code.confirming': 'Checking the code…',
+    'contact_code.resend': 'Send a new code',
+    'contact_code.resend_in': 'You can ask for a new code in {seconds} seconds.',
+    'contact_code.sends_remaining': 'You can ask for {count} more codes.',
+    'questions.title': 'Answer a few questions',
+    'questions.body': '{verifier} asks for these details.',
+    'questions.optional': 'Optional',
+    'questions.choose_one': 'Choose an option',
+    'questions.choose_many': 'Choose all that apply.',
+    'questions.choose_country': 'Choose a country',
+    'questions.send': 'Send answers',
+    'questions.sending': 'Sending your answers…',
+    'questions.required': 'Answer this question to continue.',
+    'questions.consent_required': 'Give your consent to continue.',
+    'questions.invalid_number': 'Enter a number.',
+    'questions.number_min': 'Enter at least {min}.',
+    'questions.number_max': 'Enter at most {max}.',
+    'questions.invalid_date': 'Enter a real date.',
+    'questions.invalid_email': 'Enter a valid email address.',
+    'questions.invalid_phone': 'Enter a valid phone number.',
+    'questions.text_too_long': 'Use at most 5000 characters.',
+    'questions.founders_name': 'Founder name',
+    'questions.founders_add': 'Add a founder',
+    'questions.founders_remove': 'Remove',
+    'questions.founders_includes_me': 'I am one of the founders',
+    'handoff.action': 'Continue on your phone',
+    'handoff.title': 'Continue on your phone',
+    'handoff.body': 'Scan this code with your phone camera to carry on there. The code works once and expires in {minutes} minutes.',
+    'handoff.expired': 'This code has expired.',
+    'handoff.new_code': 'Show a new code',
+    'handoff.link_invalid': 'This link has expired or was already used. Open a new one on the device where you started.',
+    'rejection.requested_by': 'Requested by {verifier}.',
+    'rejection.help': 'If you need help, contact {verifier}.',
+    'rejection.help_email': 'If you need help, contact {verifier} at {help_email}.',
+    'rejection.help_url': 'If you need help, visit {help_url}.',
+    'rejection.action.retry': 'Try again',
+    'rejection.action.restart': 'Start again',
+    'rejection.action.reenter_code': 'Enter the code again',
+    'rejection.action.new_code': 'Send a new code',
+    'rejection.action.wait': 'Send a new code',
+    'rejection.action.leave': 'Close',
+    'rejection.location_accuracy.title': 'Location not precise enough',
+    'rejection.location_stale.title': 'Location out of date',
+    'rejection.location_mock.title': 'Location is being changed',
+    'rejection.location_ip_country.title': 'Connection in another country',
+    'rejection.location_reference.title': 'Location does not match',
+    'rejection.liveness_expired.title': 'Time ran out',
+    'rejection.liveness_restart.title': 'Start this step again',
+    'rejection.liveness_restart.message': 'This attempt can no longer be used. Start this step again.',
+    'rejection.gesture_mismatch.title': 'Movements did not match',
+    'rejection.gesture_mismatch.message': 'Some movements were missing or out of order. Start this step again and follow each prompt.',
+    'rejection.not_camera.title': 'Camera needed',
+    'rejection.not_camera.message': 'This step needs photos taken with the camera during the step. Start it again and use the camera.',
+    'rejection.video_missing.title': 'Recording missing',
+    'rejection.video_missing.message': 'The recording of this step did not arrive. Start the step again.',
+    'rejection.video_too_long.title': 'Recording too long',
+    'rejection.video_too_long.message': 'The recording was longer than allowed. Start the step again and follow the prompts without pausing.',
+    'rejection.video_unreadable.title': 'Recording could not be read',
+    'rejection.video_unreadable.message': 'We could not read the recording. Start the step again.',
+    'rejection.email_not_configured.title': 'Email confirmation unavailable',
+    'rejection.email_not_configured.message': 'Confirming an email address is not available for this request yet. Contact {verifier}.',
+    'rejection.phone_not_configured.title': 'Phone confirmation unavailable',
+    'rejection.phone_not_configured.message': 'Confirming a phone number is not available for this request yet. Contact {verifier}.',
+    'rejection.code_resend_too_soon.title': 'Wait before asking again',
+    'rejection.code_resend_too_soon.message': 'A code was sent less than a minute ago. Wait a moment, then ask for a new code.',
+    'rejection.code_send_limit.title': 'Too many codes sent',
+    'rejection.code_send_limit.message': 'Too many codes were sent for this request. Try again in 24 hours.',
+    'rejection.code_missing.title': 'No code to check',
+    'rejection.code_missing.message': 'Ask for a code first, then enter it here.',
+    'rejection.code_expired.title': 'Code expired',
+    'rejection.code_expired.message': 'This code has expired. Ask for a new one.',
+    'rejection.code_invalid.title': 'Code not correct',
+    'rejection.code_invalid.message': 'This code is not correct. Check it and enter it again.',
+    'rejection.code_too_many_attempts.title': 'Too many wrong codes',
+    'rejection.code_too_many_attempts.message': 'Too many wrong codes were entered. Ask for a new code.',
     'errors.generic': 'Something went wrong. Try again.',
     'errors.network': 'Could not connect. Check your connection and try again.',
     'errors.session_expired': 'Your session has expired. Close this screen and start again.',
@@ -590,6 +699,9 @@ abstract final class SpecCopy {
     'errors.send_selfie_failed': 'Could not send your selfie. Check your connection and try again.',
     'errors.challenge_failed': 'We could not start this step. Check your connection and try again.',
     'errors.send_location_failed': 'Could not send your location. Check your connection and try again.',
+    'errors.send_code_failed': 'Could not send the code. Check your connection and try again.',
+    'errors.confirm_code_failed': 'Could not check the code. Check your connection and try again.',
+    'errors.send_answers_failed': 'Could not send your answers. Check your connection and try again.',
   };
 }
 
@@ -672,6 +784,9 @@ abstract final class SpecCopyKey {
   static const String receiptDocument = 'receipt.document';
   static const String receiptSelfie = 'receipt.selfie';
   static const String receiptLocation = 'receipt.location';
+  static const String receiptEmail = 'receipt.email';
+  static const String receiptPhone = 'receipt.phone';
+  static const String receiptAnswers = 'receipt.answers';
   static const String receiptHostSteps = 'receipt.host_steps';
   static const String receiptDone = 'receipt.done';
   static const String selfieTitle = 'selfie.title';
@@ -753,6 +868,102 @@ abstract final class SpecCopyKey {
   static const String locationPlaceNotPrecise = 'location.place.not_precise';
   static const String locationPlaceRejected = 'location.place.rejected';
   static const String locationPlaceRetry = 'location.place.retry';
+  static const String emailTitle = 'email.title';
+  static const String emailBody = 'email.body';
+  static const String emailLabel = 'email.label';
+  static const String emailPlaceholder = 'email.placeholder';
+  static const String emailSend = 'email.send';
+  static const String emailInvalid = 'email.invalid';
+  static const String emailChange = 'email.change';
+  static const String emailChangeAfter = 'email.change_after';
+  static const String phoneTitle = 'phone.title';
+  static const String phoneBody = 'phone.body';
+  static const String phoneLabel = 'phone.label';
+  static const String phoneHint = 'phone.hint';
+  static const String phoneSend = 'phone.send';
+  static const String phoneInvalid = 'phone.invalid';
+  static const String phoneChange = 'phone.change';
+  static const String phoneChangeAfter = 'phone.change_after';
+  static const String contactCodeSending = 'contact_code.sending';
+  static const String contactCodeTitle = 'contact_code.title';
+  static const String contactCodeBody = 'contact_code.body';
+  static const String contactCodeLabel = 'contact_code.label';
+  static const String contactCodeConfirm = 'contact_code.confirm';
+  static const String contactCodeConfirming = 'contact_code.confirming';
+  static const String contactCodeResend = 'contact_code.resend';
+  static const String contactCodeResendIn = 'contact_code.resend_in';
+  static const String contactCodeSendsRemaining = 'contact_code.sends_remaining';
+  static const String questionsTitle = 'questions.title';
+  static const String questionsBody = 'questions.body';
+  static const String questionsOptional = 'questions.optional';
+  static const String questionsChooseOne = 'questions.choose_one';
+  static const String questionsChooseMany = 'questions.choose_many';
+  static const String questionsChooseCountry = 'questions.choose_country';
+  static const String questionsSend = 'questions.send';
+  static const String questionsSending = 'questions.sending';
+  static const String questionsRequired = 'questions.required';
+  static const String questionsConsentRequired = 'questions.consent_required';
+  static const String questionsInvalidNumber = 'questions.invalid_number';
+  static const String questionsNumberMin = 'questions.number_min';
+  static const String questionsNumberMax = 'questions.number_max';
+  static const String questionsInvalidDate = 'questions.invalid_date';
+  static const String questionsInvalidEmail = 'questions.invalid_email';
+  static const String questionsInvalidPhone = 'questions.invalid_phone';
+  static const String questionsTextTooLong = 'questions.text_too_long';
+  static const String questionsFoundersName = 'questions.founders_name';
+  static const String questionsFoundersAdd = 'questions.founders_add';
+  static const String questionsFoundersRemove = 'questions.founders_remove';
+  static const String questionsFoundersIncludesMe = 'questions.founders_includes_me';
+  static const String handoffAction = 'handoff.action';
+  static const String handoffTitle = 'handoff.title';
+  static const String handoffBody = 'handoff.body';
+  static const String handoffExpired = 'handoff.expired';
+  static const String handoffNewCode = 'handoff.new_code';
+  static const String handoffLinkInvalid = 'handoff.link_invalid';
+  static const String rejectionRequestedBy = 'rejection.requested_by';
+  static const String rejectionHelp = 'rejection.help';
+  static const String rejectionHelpEmail = 'rejection.help_email';
+  static const String rejectionHelpUrl = 'rejection.help_url';
+  static const String rejectionActionRetry = 'rejection.action.retry';
+  static const String rejectionActionRestart = 'rejection.action.restart';
+  static const String rejectionActionReenterCode = 'rejection.action.reenter_code';
+  static const String rejectionActionNewCode = 'rejection.action.new_code';
+  static const String rejectionActionWait = 'rejection.action.wait';
+  static const String rejectionActionLeave = 'rejection.action.leave';
+  static const String rejectionLocationAccuracyTitle = 'rejection.location_accuracy.title';
+  static const String rejectionLocationStaleTitle = 'rejection.location_stale.title';
+  static const String rejectionLocationMockTitle = 'rejection.location_mock.title';
+  static const String rejectionLocationIpCountryTitle = 'rejection.location_ip_country.title';
+  static const String rejectionLocationReferenceTitle = 'rejection.location_reference.title';
+  static const String rejectionLivenessExpiredTitle = 'rejection.liveness_expired.title';
+  static const String rejectionLivenessRestartTitle = 'rejection.liveness_restart.title';
+  static const String rejectionLivenessRestartMessage = 'rejection.liveness_restart.message';
+  static const String rejectionGestureMismatchTitle = 'rejection.gesture_mismatch.title';
+  static const String rejectionGestureMismatchMessage = 'rejection.gesture_mismatch.message';
+  static const String rejectionNotCameraTitle = 'rejection.not_camera.title';
+  static const String rejectionNotCameraMessage = 'rejection.not_camera.message';
+  static const String rejectionVideoMissingTitle = 'rejection.video_missing.title';
+  static const String rejectionVideoMissingMessage = 'rejection.video_missing.message';
+  static const String rejectionVideoTooLongTitle = 'rejection.video_too_long.title';
+  static const String rejectionVideoTooLongMessage = 'rejection.video_too_long.message';
+  static const String rejectionVideoUnreadableTitle = 'rejection.video_unreadable.title';
+  static const String rejectionVideoUnreadableMessage = 'rejection.video_unreadable.message';
+  static const String rejectionEmailNotConfiguredTitle = 'rejection.email_not_configured.title';
+  static const String rejectionEmailNotConfiguredMessage = 'rejection.email_not_configured.message';
+  static const String rejectionPhoneNotConfiguredTitle = 'rejection.phone_not_configured.title';
+  static const String rejectionPhoneNotConfiguredMessage = 'rejection.phone_not_configured.message';
+  static const String rejectionCodeResendTooSoonTitle = 'rejection.code_resend_too_soon.title';
+  static const String rejectionCodeResendTooSoonMessage = 'rejection.code_resend_too_soon.message';
+  static const String rejectionCodeSendLimitTitle = 'rejection.code_send_limit.title';
+  static const String rejectionCodeSendLimitMessage = 'rejection.code_send_limit.message';
+  static const String rejectionCodeMissingTitle = 'rejection.code_missing.title';
+  static const String rejectionCodeMissingMessage = 'rejection.code_missing.message';
+  static const String rejectionCodeExpiredTitle = 'rejection.code_expired.title';
+  static const String rejectionCodeExpiredMessage = 'rejection.code_expired.message';
+  static const String rejectionCodeInvalidTitle = 'rejection.code_invalid.title';
+  static const String rejectionCodeInvalidMessage = 'rejection.code_invalid.message';
+  static const String rejectionCodeTooManyAttemptsTitle = 'rejection.code_too_many_attempts.title';
+  static const String rejectionCodeTooManyAttemptsMessage = 'rejection.code_too_many_attempts.message';
   static const String errorsGeneric = 'errors.generic';
   static const String errorsNetwork = 'errors.network';
   static const String errorsSessionExpired = 'errors.session_expired';
@@ -776,6 +987,9 @@ abstract final class SpecCopyKey {
   static const String errorsSendSelfieFailed = 'errors.send_selfie_failed';
   static const String errorsChallengeFailed = 'errors.challenge_failed';
   static const String errorsSendLocationFailed = 'errors.send_location_failed';
+  static const String errorsSendCodeFailed = 'errors.send_code_failed';
+  static const String errorsConfirmCodeFailed = 'errors.confirm_code_failed';
+  static const String errorsSendAnswersFailed = 'errors.send_answers_failed';
 }
 
 abstract final class SpecErrorCode {
@@ -793,6 +1007,20 @@ abstract final class SpecErrorCode {
   static const String livenessVideoMissing = 'liveness.video_missing';
   static const String livenessVideoTooLong = 'liveness.video_too_long';
   static const String livenessVideoUnreadable = 'liveness.video_unreadable';
+  static const String emailNotConfigured = 'email.not_configured';
+  static const String emailResendTooSoon = 'email.resend_too_soon';
+  static const String emailSendLimit = 'email.send_limit';
+  static const String emailCodeMissing = 'email.code_missing';
+  static const String emailCodeExpired = 'email.code_expired';
+  static const String emailCodeInvalid = 'email.code_invalid';
+  static const String emailTooManyAttempts = 'email.too_many_attempts';
+  static const String phoneNotConfigured = 'phone.not_configured';
+  static const String phoneResendTooSoon = 'phone.resend_too_soon';
+  static const String phoneSendLimit = 'phone.send_limit';
+  static const String phoneCodeMissing = 'phone.code_missing';
+  static const String phoneCodeExpired = 'phone.code_expired';
+  static const String phoneCodeInvalid = 'phone.code_invalid';
+  static const String phoneTooManyAttempts = 'phone.too_many_attempts';
   static const Map<String, String> meanings = {
     'location.accuracy': 'Accuracy is missing or larger than max_accuracy_m',
     'location.stale': 'fix_time is missing, older than max_age_s plus clock_skew_s, or in the future',
@@ -808,7 +1036,334 @@ abstract final class SpecErrorCode {
     'liveness.video_missing': 'record_video is on and no video for this challenge was sent',
     'liveness.video_too_long': 'The video is longer than max_video_seconds plus one second',
     'liveness.video_unreadable': 'The server cannot read the video duration',
+    'email.not_configured': 'No email sender serves this environment, for example the log driver on a live case',
+    'email.resend_too_soon': 'A code was sent to this email address less than 60 seconds ago',
+    'email.send_limit': 'Five codes were sent for this case within 24 hours',
+    'email.code_missing': 'No unused code was requested for this case',
+    'email.code_expired': 'The code is older than 10 minutes',
+    'email.code_invalid': 'The code does not match',
+    'email.too_many_attempts': 'Five wrong codes were entered; a new code is needed',
+    'phone.not_configured': 'No SMS sender serves this environment, for example the log driver on a live case',
+    'phone.resend_too_soon': 'A code was sent to this phone number less than 60 seconds ago',
+    'phone.send_limit': 'Five codes were sent for this case within 24 hours',
+    'phone.code_missing': 'No unused code was requested for this case',
+    'phone.code_expired': 'The code is older than 10 minutes',
+    'phone.code_invalid': 'The code does not match',
+    'phone.too_many_attempts': 'Five wrong codes were entered; a new code is needed',
   };
+}
+
+abstract final class SpecRejection {
+  static const String requestedBy = 'rejection.requested_by';
+  static const String help = 'rejection.help';
+  static const String helpEmail = 'rejection.help_email';
+  static const String helpUrl = 'rejection.help_url';
+  static const List<String> actions = [
+    'retry',
+    'restart',
+    'reenter_code',
+    'new_code',
+    'wait',
+    'leave',
+  ];
+  static const Map<String, String> actionLabels = {
+    'retry': 'rejection.action.retry',
+    'restart': 'rejection.action.restart',
+    'reenter_code': 'rejection.action.reenter_code',
+    'new_code': 'rejection.action.new_code',
+    'wait': 'rejection.action.wait',
+    'leave': 'rejection.action.leave',
+  };
+  static const Map<String, SpecRejectionCopy> codes = {
+    'location.accuracy': SpecRejectionCopy(
+      title: 'rejection.location_accuracy.title',
+      message: 'location.low_accuracy',
+      action: 'retry',
+      placeMessageWithin: 'location.place.not_precise',
+      placeMessageOutside: 'location.place.not_precise',
+    ),
+    'location.stale': SpecRejectionCopy(
+      title: 'rejection.location_stale.title',
+      message: 'location.stale',
+      action: 'retry',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'location.mock': SpecRejectionCopy(
+      title: 'rejection.location_mock.title',
+      message: 'location.mock_detected',
+      action: 'retry',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'location.ip_country': SpecRejectionCopy(
+      title: 'rejection.location_ip_country.title',
+      message: 'location.ip_country_mismatch',
+      action: 'retry',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'location.reference_not_matched': SpecRejectionCopy(
+      title: 'rejection.location_reference.title',
+      message: 'location.place.rejected',
+      action: 'retry',
+      placeMessageWithin: 'location.place.not_matched_within',
+      placeMessageOutside: 'location.place.not_matched_outside',
+    ),
+    'liveness.challenge_invalid': SpecRejectionCopy(
+      title: 'rejection.liveness_restart.title',
+      message: 'rejection.liveness_restart.message',
+      action: 'restart',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'liveness.challenge_expired': SpecRejectionCopy(
+      title: 'rejection.liveness_expired.title',
+      message: 'liveness.expired',
+      action: 'restart',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'liveness.challenge_used': SpecRejectionCopy(
+      title: 'rejection.liveness_restart.title',
+      message: 'rejection.liveness_restart.message',
+      action: 'restart',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'liveness.gesture_mismatch': SpecRejectionCopy(
+      title: 'rejection.gesture_mismatch.title',
+      message: 'rejection.gesture_mismatch.message',
+      action: 'restart',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'liveness.frame_out_of_window': SpecRejectionCopy(
+      title: 'rejection.liveness_expired.title',
+      message: 'liveness.expired',
+      action: 'restart',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'liveness.not_camera': SpecRejectionCopy(
+      title: 'rejection.not_camera.title',
+      message: 'rejection.not_camera.message',
+      action: 'restart',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'liveness.video_missing': SpecRejectionCopy(
+      title: 'rejection.video_missing.title',
+      message: 'rejection.video_missing.message',
+      action: 'restart',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'liveness.video_too_long': SpecRejectionCopy(
+      title: 'rejection.video_too_long.title',
+      message: 'rejection.video_too_long.message',
+      action: 'restart',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'liveness.video_unreadable': SpecRejectionCopy(
+      title: 'rejection.video_unreadable.title',
+      message: 'rejection.video_unreadable.message',
+      action: 'restart',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'email.not_configured': SpecRejectionCopy(
+      title: 'rejection.email_not_configured.title',
+      message: 'rejection.email_not_configured.message',
+      action: 'leave',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'email.resend_too_soon': SpecRejectionCopy(
+      title: 'rejection.code_resend_too_soon.title',
+      message: 'rejection.code_resend_too_soon.message',
+      action: 'wait',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'email.send_limit': SpecRejectionCopy(
+      title: 'rejection.code_send_limit.title',
+      message: 'rejection.code_send_limit.message',
+      action: 'leave',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'email.code_missing': SpecRejectionCopy(
+      title: 'rejection.code_missing.title',
+      message: 'rejection.code_missing.message',
+      action: 'new_code',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'email.code_expired': SpecRejectionCopy(
+      title: 'rejection.code_expired.title',
+      message: 'rejection.code_expired.message',
+      action: 'new_code',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'email.code_invalid': SpecRejectionCopy(
+      title: 'rejection.code_invalid.title',
+      message: 'rejection.code_invalid.message',
+      action: 'reenter_code',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'email.too_many_attempts': SpecRejectionCopy(
+      title: 'rejection.code_too_many_attempts.title',
+      message: 'rejection.code_too_many_attempts.message',
+      action: 'new_code',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'phone.not_configured': SpecRejectionCopy(
+      title: 'rejection.phone_not_configured.title',
+      message: 'rejection.phone_not_configured.message',
+      action: 'leave',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'phone.resend_too_soon': SpecRejectionCopy(
+      title: 'rejection.code_resend_too_soon.title',
+      message: 'rejection.code_resend_too_soon.message',
+      action: 'wait',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'phone.send_limit': SpecRejectionCopy(
+      title: 'rejection.code_send_limit.title',
+      message: 'rejection.code_send_limit.message',
+      action: 'leave',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'phone.code_missing': SpecRejectionCopy(
+      title: 'rejection.code_missing.title',
+      message: 'rejection.code_missing.message',
+      action: 'new_code',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'phone.code_expired': SpecRejectionCopy(
+      title: 'rejection.code_expired.title',
+      message: 'rejection.code_expired.message',
+      action: 'new_code',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'phone.code_invalid': SpecRejectionCopy(
+      title: 'rejection.code_invalid.title',
+      message: 'rejection.code_invalid.message',
+      action: 'reenter_code',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+    'phone.too_many_attempts': SpecRejectionCopy(
+      title: 'rejection.code_too_many_attempts.title',
+      message: 'rejection.code_too_many_attempts.message',
+      action: 'new_code',
+      placeMessageWithin: null,
+      placeMessageOutside: null,
+    ),
+  };
+}
+
+abstract final class SpecRequirements {
+  static const int version = 1;
+  static const List<String> verificationTypes = [
+    'facial_verification',
+    'location_verification',
+    'email_verification',
+    'phone_verification',
+  ];
+  static const String contactCodesChannelsEmail = 'email_verification';
+  static const String contactCodesChannelsPhone = 'phone_verification';
+  static const int contactCodesCodeLength = 6;
+  static const int contactCodesTtlMinutes = 10;
+  static const int contactCodesMaxAttempts = 5;
+  static const int contactCodesResendSeconds = 60;
+  static const int contactCodesMaxSends = 5;
+  static const int contactCodesSendWindowHours = 24;
+  static const int contactCodesEmailMaxLength = 254;
+  static const int contactCodesPhoneMaxLength = 32;
+  static const String contactCodesPhoneStrip = '[\\s().-]';
+  static const String contactCodesPhonePattern = '^\\+[1-9][0-9]{6,14}\$';
+  static const List<String> questionsTypes = [
+    'text',
+    'textarea',
+    'email',
+    'number',
+    'date',
+    'select',
+    'tel',
+    'founders',
+    'phone',
+    'single_select',
+    'multi_select',
+    'country',
+    'consent',
+  ];
+  static const List<String> questionsChoiceTypes = [
+    'select',
+    'single_select',
+    'multi_select',
+  ];
+  static const String questionsKeyPattern = '^[A-Za-z][A-Za-z0-9_-]{0,99}\$';
+  static const int questionsMaxOptions = 100;
+  static const int questionsMaxOptionLength = 200;
+  static const int questionsTextMaxLength = 5000;
+  static const String questionsNumberPattern = '^-?[0-9]+(\\.[0-9]+)?\$';
+  static const String questionsDatePattern = '^\\d{4}-\\d{2}-\\d{2}\$';
+  static const String questionsPhonePattern = '^\\+?[0-9][0-9 ().-]{4,30}\$';
+  static const String questionsCountryPattern = '^[A-Z]{2}\$';
+  static const int questionsEmailMaxLength = 254;
+  static const List<String> showIfMatch = [
+    'all',
+    'any',
+  ];
+  static const String showIfDefaultMatch = 'all';
+  static const int showIfMaxConditions = 10;
+  static const String showIfPathPrefix = 'form.';
+  static const String showIfEarlierAnswers = 'profile.form_answers';
+  static const List<String> showIfOperators = [
+    'equals',
+    'not_equals',
+    'gt',
+    'gte',
+    'lt',
+    'lte',
+    'contains',
+    'not_contains',
+    'in',
+    'not_in',
+    'is_empty',
+    'is_not_empty',
+    'regex',
+    'fuzzy_match',
+  ];
+  static const int showIfMaxListValues = 100;
+  static const int showIfMaxPatternLength = 200;
+  static const int showIfFuzzyDefaultMinScore = 80;
+  static const List<String> refreshAfter = [
+    'submit',
+    'email_code_confirm',
+    'phone_code_confirm',
+  ];
+  static const List<String> refreshOpenStatuses = [
+    'pending',
+    'in_progress',
+  ];
+  static const List<String> refreshOutstanding = [
+    'profile.document_requirements',
+    'profile.verification_requirements',
+    'profile.form_schema',
+  ];
 }
 
 abstract final class SpecTokens {

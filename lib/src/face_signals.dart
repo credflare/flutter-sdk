@@ -1,9 +1,12 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 import 'liveness_engine.dart';
+
+const _faces = MethodChannel('credflare_sdk/faces');
 
 class CameraFrame {
   final Uint8List bytes;
@@ -74,8 +77,26 @@ abstract class FaceSignalProvider {
   Future<void> close();
 }
 
-FaceSample faceSampleFromMlKit(
-  List<Face> faces, {
+/// A face found by ML Kit, in pixels of the upright frame.
+class DetectedFace {
+  final Rect boundingBox;
+  final double? headEulerAngleX;
+  final double? headEulerAngleY;
+  final double? smilingProbability;
+  final double? leftEyeOpenProbability;
+  final double? rightEyeOpenProbability;
+  const DetectedFace({
+    required this.boundingBox,
+    this.headEulerAngleX,
+    this.headEulerAngleY,
+    this.smilingProbability,
+    this.leftEyeOpenProbability,
+    this.rightEyeOpenProbability,
+  });
+}
+
+FaceSample faceSampleFromDetectedFaces(
+  List<DetectedFace> faces, {
   required int t,
   required int width,
   required int height,
@@ -110,6 +131,112 @@ FaceSample faceSampleFromMlKit(
     smile: face.smilingProbability,
     yaw: yaw == null ? null : (mirrored ? -yaw : yaw),
     pitch: face.headEulerAngleX,
+  );
+}
+
+/// Reads faces with the fields of an ML Kit `Face`.
+@Deprecated('Use faceSampleFromDetectedFaces with DetectedFace.')
+FaceSample faceSampleFromMlKit(
+  List<Object> faces, {
+  required int t,
+  required int width,
+  required int height,
+  required bool mirrored,
+}) => faceSampleFromDetectedFaces(
+  [
+    for (final dynamic face in faces)
+      face is DetectedFace
+          ? face
+          : DetectedFace(
+              boundingBox: face.boundingBox as Rect,
+              headEulerAngleX: (face.headEulerAngleX as num?)?.toDouble(),
+              headEulerAngleY: (face.headEulerAngleY as num?)?.toDouble(),
+              smilingProbability: (face.smilingProbability as num?)?.toDouble(),
+              leftEyeOpenProbability: (face.leftEyeOpenProbability as num?)
+                  ?.toDouble(),
+              rightEyeOpenProbability: (face.rightEyeOpenProbability as num?)
+                  ?.toDouble(),
+            ),
+  ],
+  t: t,
+  width: width,
+  height: height,
+  mirrored: mirrored,
+);
+
+/// Turns Vision eye and mouth shapes into the contract's 0 to 1 signals,
+/// relative to the applicant's own first frames.
+class VisionSignalNormalizer {
+  static const fallbackEyeRatio = 0.27;
+  static const fallbackMouthRatio = 0.95;
+  static const baselineFrames = 8;
+  static const closedEyeFraction = 0.35;
+  static const fullSmileWidening = 0.18;
+
+  final _eyeRatios = <double>[];
+  final _mouthRatios = <double>[];
+
+  double get eyeBaseline => _median(_eyeRatios) ?? fallbackEyeRatio;
+  double get mouthBaseline => _median(_mouthRatios) ?? fallbackMouthRatio;
+
+  double eyeOpen(double ratio) {
+    if (_eyeRatios.length < baselineFrames) _eyeRatios.add(ratio);
+    final relative = ratio / eyeBaseline;
+    return _clamp((relative - closedEyeFraction) / (1 - closedEyeFraction));
+  }
+
+  double smile(double ratio) {
+    if (_mouthRatios.length < baselineFrames) _mouthRatios.add(ratio);
+    return _clamp((ratio / mouthBaseline - 1) / fullSmileWidening);
+  }
+
+  static double contractYaw(double radians) => radians * 180 / math.pi;
+  static double contractPitch(double radians) => -radians * 180 / math.pi;
+
+  /// Vision boxes start at the bottom left; the contract's at the top left.
+  static FaceBox contractBox(double x, double y, double w, double h) =>
+      FaceBox(x, 1 - (y + h), w, h);
+
+  static double _clamp(double value) => math.min(1, math.max(0, value));
+
+  static double? _median(List<double> values) {
+    if (values.length < baselineFrames) return null;
+    final sorted = [...values]..sort();
+    return sorted[sorted.length ~/ 2];
+  }
+}
+
+/// Builds a sample from one Vision reading of an upright frame.
+FaceSample faceSampleFromVision(
+  Map reading,
+  VisionSignalNormalizer normalizer, {
+  required int t,
+  required bool mirrored,
+}) {
+  final faces = (reading['faces'] as num?)?.toInt() ?? 0;
+  if (faces != 1) return FaceSample(t: t, faces: faces);
+  double? value(String key) => (reading[key] as num?)?.toDouble();
+  final box = VisionSignalNormalizer.contractBox(
+    value('x')!,
+    value('y')!,
+    value('width')!,
+    value('height')!,
+  );
+  final yaw = value('yaw');
+  final pitch = value('pitch');
+  final eyes = value('eye_ratio');
+  final mouth = value('mouth_ratio');
+  final contractYaw = yaw == null
+      ? null
+      : VisionSignalNormalizer.contractYaw(yaw);
+  return FaceSample(
+    t: t,
+    faces: 1,
+    box: mirrored ? FaceBox(1 - box.x - box.w, box.y, box.w, box.h) : box,
+    yaw: contractYaw == null ? null : (mirrored ? -contractYaw : contractYaw),
+    pitch: pitch == null ? null : VisionSignalNormalizer.contractPitch(pitch),
+    eyeOpen: eyes == null ? null : normalizer.eyeOpen(eyes),
+    smile: mouth == null ? null : normalizer.smile(mouth),
   );
 }
 
@@ -155,34 +282,53 @@ CameraFrame? cameraFrame(
   );
 }
 
+/// The face reader for this platform: Apple's Vision on iOS, ML Kit
+/// elsewhere.
+FaceSignalProvider defaultFaceSignalProvider() =>
+    defaultTargetPlatform == TargetPlatform.iOS
+    ? VisionFaceSignalProvider()
+    : MlKitFaceSignalProvider();
+
+/// Reads faces with ML Kit on Android.
 class MlKitFaceSignalProvider implements FaceSignalProvider {
-  final FaceDetector _detector = FaceDetector(
-    options: FaceDetectorOptions(
-      enableClassification: true,
-      performanceMode: FaceDetectorMode.accurate,
-      minFaceSize: 0.15,
-    ),
-  );
+  static var _next = 0;
+  final String _id = 'faces-${_next++}';
 
   @override
   String get name => 'mlkit';
 
   @override
   Future<FaceSample> process(CameraFrame frame, {required int t}) async {
-    final input = InputImage.fromBytes(
-      bytes: frame.bytes,
-      metadata: InputImageMetadata(
-        size: Size(frame.width.toDouble(), frame.height.toDouble()),
-        rotation:
-            InputImageRotationValue.fromRawValue(frame.rotation) ??
-            InputImageRotation.rotation0deg,
-        format: frame.nv21 ? InputImageFormat.nv21 : InputImageFormat.bgra8888,
-        bytesPerRow: frame.bytesPerRow,
-      ),
-    );
-    final faces = await _detector.processImage(input);
-    return faceSampleFromMlKit(
-      faces,
+    if (!frame.nv21) {
+      throw UnsupportedError('ML Kit here reads NV21 frames only.');
+    }
+    final faces =
+        await _faces.invokeListMethod<Map>('mlkit#process', {
+          'id': _id,
+          'bytes': frame.bytes,
+          'width': frame.width,
+          'height': frame.height,
+          'rotation': frame.rotation,
+        }) ??
+        const [];
+    return faceSampleFromDetectedFaces(
+      [
+        for (final face in faces)
+          DetectedFace(
+            boundingBox: Rect.fromLTRB(
+              (face['left'] as num).toDouble(),
+              (face['top'] as num).toDouble(),
+              (face['right'] as num).toDouble(),
+              (face['bottom'] as num).toDouble(),
+            ),
+            headEulerAngleX: (face['pitch'] as num?)?.toDouble(),
+            headEulerAngleY: (face['yaw'] as num?)?.toDouble(),
+            smilingProbability: (face['smile'] as num?)?.toDouble(),
+            leftEyeOpenProbability: (face['left_eye_open'] as num?)?.toDouble(),
+            rightEyeOpenProbability: (face['right_eye_open'] as num?)
+                ?.toDouble(),
+          ),
+      ],
       t: t,
       width: frame.uprightWidth,
       height: frame.uprightHeight,
@@ -191,5 +337,40 @@ class MlKitFaceSignalProvider implements FaceSignalProvider {
   }
 
   @override
-  Future<void> close() => _detector.close();
+  Future<void> close() => _faces.invokeMethod('mlkit#close', {'id': _id});
+}
+
+/// Reads faces with Apple's Vision framework on iOS.
+class VisionFaceSignalProvider implements FaceSignalProvider {
+  var _normalizer = VisionSignalNormalizer();
+
+  @override
+  String get name => 'vision';
+
+  /// Starts a new baseline for the eyes and mouth.
+  void reset() => _normalizer = VisionSignalNormalizer();
+
+  @override
+  Future<FaceSample> process(CameraFrame frame, {required int t}) async {
+    if (frame.nv21 || frame.rotation != 0) {
+      throw UnsupportedError('Vision here reads upright BGRA frames only.');
+    }
+    final reading =
+        await _faces.invokeMapMethod<String, Object?>('vision#process', {
+          'bytes': frame.bytes,
+          'width': frame.width,
+          'height': frame.height,
+          'bytesPerRow': frame.bytesPerRow,
+        }) ??
+        const {'faces': 0};
+    return faceSampleFromVision(
+      reading,
+      _normalizer,
+      t: t,
+      mirrored: frame.mirrored,
+    );
+  }
+
+  @override
+  Future<void> close() async {}
 }
