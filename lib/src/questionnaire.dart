@@ -372,7 +372,10 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
         if (!RegExp(SpecRequirements.questionsNumberPattern).hasMatch(raw)) {
           return raw;
         }
-        return int.tryParse(raw) ?? double.parse(raw);
+        final number = raw.contains('.')
+            ? double.parse(raw)
+            : int.tryParse(raw);
+        return number != null && number.toString() == raw ? number : raw;
       default:
         final raw = _controller(key).text;
         return raw.trim().isEmpty ? null : raw.trim();
@@ -393,8 +396,14 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
       }
       visible.add(q);
       final value = _answer(q);
-      context[key] = value;
-      if (!_blank(value)) fields[key] = value;
+      if (_blank(value)) {
+        widget.earlierAnswers.containsKey(key)
+            ? context[key] = widget.earlierAnswers[key]
+            : context.remove(key);
+      } else {
+        context[key] = value;
+        fields[key] = value;
+      }
     }
     return (visible, fields);
   }
@@ -417,13 +426,20 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
           return copy(SpecCopyKey.questionsTextTooLong);
         }
       case 'number':
-        if (value is! num) return copy(SpecCopyKey.questionsInvalidNumber);
+        final number = value is num
+            ? value
+            : RegExp(
+                SpecRequirements.questionsNumberPattern,
+              ).hasMatch(value as String)
+            ? num.parse(value)
+            : null;
+        if (number == null) return copy(SpecCopyKey.questionsInvalidNumber);
         final min = q['min'];
         final max = q['max'];
-        if (min is num && value < min) {
+        if (min is num && number < min) {
           return copy(SpecCopyKey.questionsNumberMin, {'min': _number(min)});
         }
-        if (max is num && value > max) {
+        if (max is num && number > max) {
           return copy(SpecCopyKey.questionsNumberMax, {'max': _number(max)});
         }
       case 'date':
@@ -656,8 +672,8 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
                 final picked = await showDatePicker(
                   context: context,
                   initialDate: initial,
-                  firstDate: DateTime(1900),
-                  lastDate: DateTime(2100, 12, 31),
+                  firstDate: DateTime(0),
+                  lastDate: DateTime(9999, 12, 31),
                 );
                 if (picked == null || !mounted) return;
                 _values[key] = _formatDate(picked);

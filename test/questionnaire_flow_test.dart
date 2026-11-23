@@ -50,6 +50,40 @@ Map<String, dynamic> lastSubmit(Backend backend) =>
 
 Finder question(String key) => find.byKey(ValueKey('q-$key'));
 
+String consentLabel() =>
+    fixture(
+          'questionnaire-session',
+        )['data']['profile']['form_schema'].last['label']
+        as String;
+
+Future<void> pickToday(WidgetTester tester) async {
+  await tester.ensureVisible(find.byKey(const ValueKey('question-birth_date')));
+  await tester.tap(find.byKey(const ValueKey('question-birth_date')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('OK'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> answerRequired(WidgetTester tester) async {
+  await choose(tester, 'employment', 'Student');
+  await choose(tester, 'country', '${flag('AD')}  AD');
+  await pickToday(tester);
+  await tapText(tester, consentLabel());
+}
+
+Map<String, dynamic> questionnaireWith(
+  void Function(List<Map<String, dynamic>> schema) change,
+) {
+  final raw = fixture('questionnaire-session');
+  final schema = [
+    for (final q in raw['data']['profile']['form_schema'] as List)
+      Map<String, dynamic>.from(q as Map),
+  ];
+  change(schema);
+  raw['data']['profile']['form_schema'] = schema;
+  return raw;
+}
+
 void main() {
   setUp(() {
     final binding = TestWidgetsFlutterBinding.ensureInitialized();
@@ -196,6 +230,99 @@ void main() {
     final fields = lastSubmit(backend)['fields'] as Map;
     expect(fields['income'], 50000.5);
     expect(fields['employer'], 'Acme');
+  });
+
+  testWidgets('an empty multiple choice is evaluated as not answered', (
+    tester,
+  ) async {
+    final missing = (fixture('show-if-cases')['conditions'] as List)
+        .cast<Map>()
+        .firstWhere((c) => c['name'] == 'not_contains missing answer');
+    expect(missing['expect'], isFalse);
+    final session = questionnaireWith((schema) {
+      final other = schema.firstWhere((q) => q['key'] == 'sources_other');
+      schema.insert(schema.indexOf(other) + 1, {
+        ...other,
+        'key': 'sources_note',
+        'required': false,
+        'show_if': {
+          'conditions': [missing['condition']],
+        },
+      });
+    });
+    final backend = Backend()
+      ..sessions.addAll([session, fixture('requirement-added-session')]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    expect(question('sources_note'), findsNothing);
+    await tapText(tester, 'Salary');
+    expect(question('sources_note'), findsOneWidget);
+    await type(tester, 'sources_note', 'Payslips');
+    await tapText(tester, 'Salary');
+    expect(question('sources_note'), findsNothing);
+    await answerRequired(tester);
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    final fields = lastSubmit(backend)['fields'] as Map;
+    expect(fields.containsKey('sources'), isFalse);
+    expect(fields.containsKey('sources_note'), isFalse);
+  });
+
+  testWidgets('numbers that a JSON number would change are sent as text', (
+    tester,
+  ) async {
+    final session = questionnaireWith((schema) {
+      schema.firstWhere((q) => q['key'] == 'income')
+        ..remove('min')
+        ..remove('max');
+    });
+    for (final (typed, sent) in [
+      ('12345678901234567890', '12345678901234567890' as Object),
+      ('0.10', '0.10'),
+      ('-7', -7),
+      ('2.5', 2.5),
+    ]) {
+      final backend = Backend()
+        ..sessions.addAll([session, fixture('requirement-added-session')]);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(flow(backend));
+      await tester.pumpAndSettle();
+      await answerRequired(tester);
+      await choose(tester, 'employment', 'Self employed');
+      await type(tester, 'income', typed);
+      await tapText(tester, copy(SpecCopyKey.questionsSend));
+      expect((lastSubmit(backend)['fields'] as Map)['income'], sent);
+    }
+  });
+
+  testWidgets('the date picker reaches dates before 1900', (tester) async {
+    final backend = Backend()
+      ..sessions.addAll([
+        fixture('questionnaire-session'),
+        fixture('requirement-added-session'),
+      ]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    await choose(tester, 'employment', 'Student');
+    await choose(tester, 'country', '${flag('AD')}  AD');
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('question-birth_date')),
+    );
+    await tester.tap(find.byKey(const ValueKey('question-birth_date')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.edit_outlined));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(Dialog),
+        matching: find.byType(TextField),
+      ),
+      '12/31/1899',
+    );
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    await tapText(tester, consentLabel());
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect((lastSubmit(backend)['fields'] as Map)['birth_date'], '1899-12-31');
   });
 
   testWidgets('a server rejection shows its message and marks the question', (
