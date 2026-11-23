@@ -153,12 +153,7 @@ void main() {
     expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
     expect(find.text(copy(SpecCopyKey.receiptPhone)), findsOneWidget);
     expect(find.text(copy(SpecCopyKey.errorsRefreshFailed)), findsNothing);
-    final before = contactSession('phone_verification')['data'];
-    expect(submitted, before);
-    expect(
-      (submitted!['profile']['verification_requirements'] as List).single,
-      {'verification_type': 'phone_verification', 'settings': null},
-    );
+    expect(submitted, isNull);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -201,8 +196,13 @@ void main() {
       await tester.pumpWidget(flow(backend));
       await tester.pumpAndSettle();
       await sendDestination(tester, ContactChannel.phone, '+237650000001');
+      final gets = backend.requests.where((r) => r.method == 'GET').length;
+      backend.failNextGet = true;
       await confirmCode(tester, '123456');
       expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+      expect(find.text(copy(SpecCopyKey.receiptPhone)), findsNothing);
+      expect(find.text(copy(SpecCopyKey.errorsRefreshFailed)), findsNothing);
+      expect(backend.requests.where((r) => r.method == 'GET'), hasLength(gets));
       expect(
         find.text(fixture('session-closed')['message'] as String),
         findsNothing,
@@ -578,7 +578,7 @@ void main() {
     expect(
       find.text(
         copy(SpecCopyKey.contactCodeBody, {
-          'destination': '+237650000001',
+          'destination': rejection['destination'],
           'minutes': SpecRequirements.contactCodesTtlMinutes,
         }),
       ),
@@ -664,4 +664,128 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+
+  for (final channel in ContactChannel.values) {
+    final name = channel.name;
+    final first = channel == ContactChannel.email
+        ? 'jane.doe@example.test'
+        : '+237650000001';
+    final other = channel == ContactChannel.email
+        ? 'john.doe@example.test'
+        : '+237650000002';
+    testWidgets(
+      'a $name asked for after a reload waits on the code already sent',
+      (tester) async {
+        final rejection = fixture('rejections/$name.resend_too_soon');
+        final backend = Backend()
+          ..sessions.addAll([
+            contactSession(channel.verificationType),
+            doneSession(),
+          ])
+          ..codeRejections.add(rejection);
+        await tester.pumpWidget(flow(backend));
+        await tester.pumpAndSettle();
+        await sendDestination(tester, channel, other);
+        expect(find.text(copy(SpecCopyKey.contactCodeTitle)), findsOneWidget);
+        expect(
+          find.text(
+            copy(SpecCopyKey.contactCodeBody, {
+              'destination': rejection['destination'],
+              'minutes': SpecRequirements.contactCodesTtlMinutes,
+            }),
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining(other), findsNothing);
+        expect(
+          find.text(
+            copy(
+              channel == ContactChannel.email
+                  ? SpecCopyKey.emailChangeAfter
+                  : SpecCopyKey.phoneChangeAfter,
+            ),
+          ),
+          findsNothing,
+          reason: 'the fixture countdown has already ended',
+        );
+        await confirmCode(tester, '123456');
+        expect(posts(backend, '-codes/confirm'), hasLength(1));
+        expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+
+    testWidgets('a new $name code after a refused change goes to the first', (
+      tester,
+    ) async {
+      final rejection = fixture(
+        'rejections/$name.resend_too_soon',
+      )..['destination'] = fixture('$name-code-request')['data']['destination'];
+      final at = DateTime.parse(rejection['resend_available_at'] as String);
+      var now = at.subtract(const Duration(seconds: 30));
+      final backend = Backend()
+        ..sessions.add(contactSession(channel.verificationType));
+      final session = CredflareSession(descriptor(), client: backend.client);
+      final info = await session.get();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: CredflareContactCodeCapture(
+                session: session,
+                info: info,
+                channel: channel,
+                onSubmitted: () {},
+                onLeave: (_) {},
+                onBusyChanged: (_) {},
+                now: () => now,
+              ),
+            ),
+          ),
+        ),
+      );
+      await sendDestination(tester, channel, first);
+      await tapText(
+        tester,
+        copy(
+          channel == ContactChannel.email
+              ? SpecCopyKey.emailChange
+              : SpecCopyKey.phoneChange,
+        ),
+      );
+      await tester.pump();
+      backend.codeRejections.add(rejection);
+      await sendDestination(tester, channel, other);
+      now = at.add(const Duration(minutes: 20));
+      await tester.pump(const Duration(seconds: 1));
+      backend.confirmRejections.add(fixture('rejections/$name.code_expired'));
+      await confirmCode(tester, '123456');
+      await tapText(tester, copy(SpecRejection.actionLabels['new_code']!));
+      await settle(tester);
+      final sends = posts(backend, '/$name-codes');
+      expect(sends, hasLength(3));
+      expect(jsonDecode(sends.last.body!), {name: first});
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets(
+    'a new code for a destination known only by its mask asks again',
+    (tester) async {
+      final rejection = fixture('rejections/phone.resend_too_soon');
+      final backend = Backend()
+        ..sessions.add(contactSession('phone_verification'))
+        ..codeRejections.add(rejection)
+        ..confirmRejections.add(fixture('rejections/phone.code_expired'));
+      await tester.pumpWidget(flow(backend));
+      await tester.pumpAndSettle();
+      await sendDestination(tester, ContactChannel.phone, '+237650000002');
+      await confirmCode(tester, '123456');
+      await tapText(tester, copy(SpecRejection.actionLabels['new_code']!));
+      await settle(tester);
+      expect(posts(backend, '/phone-codes'), hasLength(1));
+      expect(find.text(copy(SpecCopyKey.phoneTitle)), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 }

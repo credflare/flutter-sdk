@@ -33,12 +33,25 @@ class CredflareException implements Exception {
   final Object? errors;
   final String? code;
   final DateTime? resendAvailableAt;
+
+  /// The masked address or number a waiting code went to, on a
+  /// `resend_too_soon` rejection.
+  final String? destination;
+
+  /// When the waiting code expires, on a `resend_too_soon` rejection.
+  final DateTime? expiresAt;
+
+  /// Codes that can still be sent, on a `resend_too_soon` rejection.
+  final int? sendsRemaining;
   CredflareException(
     this.message,
     this.status, [
     this.errors,
     this.code,
     this.resendAvailableAt,
+    this.destination,
+    this.expiresAt,
+    this.sendsRemaining,
   ]);
   bool get hasKnownCode => SpecErrorCode.meanings.containsKey(code);
   String get type => status == 0
@@ -137,6 +150,15 @@ class CredflareSession {
             : null,
         envelope is Map && envelope['resend_available_at'] is String
             ? DateTime.tryParse(envelope['resend_available_at'] as String)
+            : null,
+        envelope is Map && envelope['destination'] is String
+            ? envelope['destination'] as String
+            : null,
+        envelope is Map && envelope['expires_at'] is String
+            ? DateTime.tryParse(envelope['expires_at'] as String)
+            : null,
+        envelope is Map && envelope['sends_remaining'] is int
+            ? envelope['sends_remaining'] as int
             : null,
       );
     }

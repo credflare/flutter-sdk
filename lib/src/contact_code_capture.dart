@@ -42,6 +42,10 @@ class CredflareContactCodeCapture extends StatefulWidget {
   /// Called with the rejection code while a rejection that only lets the
   /// applicant leave is shown, and with null when it is gone.
   final ValueChanged<String?>? onLeaveCodeChanged;
+
+  /// Called instead of [onSubmitted] when the confirmation is refused because
+  /// the case closed, so nothing was confirmed.
+  final VoidCallback? onClosed;
   final DateTime Function() now;
   const CredflareContactCodeCapture({
     super.key,
@@ -52,6 +56,7 @@ class CredflareContactCodeCapture extends StatefulWidget {
     required this.onLeave,
     required this.onBusyChanged,
     this.onLeaveCodeChanged,
+    this.onClosed,
     this.now = DateTime.now,
   });
   @override
@@ -64,9 +69,11 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
   final _codeFocus = FocusNode();
   _Phase _phase = _Phase.destination;
   String? _shownDestination;
+  String? _sentTo;
+  String? _refusedTo;
   int? _sendsRemaining;
   int _minutes = SpecRequirements.contactCodesTtlMinutes;
-  (String, int?, int)? _previous;
+  (String, String?, int?, int)? _previous;
   bool _changeAfter = false;
   DateTime? _resendAt;
   DateTime? _waitUntil;
@@ -140,8 +147,18 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
     if (mounted) _codeFocus.requestFocus();
   });
 
-  Future<void> _send() async {
-    final target = _validDestination();
+  int _minutesFor(DateTime expiresAt, DateTime resendAvailableAt) =>
+      (expiresAt.difference(resendAvailableAt).inSeconds +
+          SpecRequirements.contactCodesResendSeconds) ~/
+      60;
+
+  Future<void> _send({bool resend = false, String? to}) async {
+    if (resend && _shownDestination != null && _sentTo == null) {
+      _changeDestination();
+      return;
+    }
+    final target =
+        to ?? (resend && _sentTo != null ? _sentTo! : _validDestination());
     if (target == null) return;
     setState(() {
       _phase = _Phase.sending;
@@ -160,11 +177,9 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
       _codeField.clear();
       setState(() {
         _shownDestination = sent.destination;
+        _sentTo = target;
         _sendsRemaining = sent.sendsRemaining;
-        _minutes =
-            (sent.expiresAt.difference(sent.resendAvailableAt).inSeconds +
-                SpecRequirements.contactCodesResendSeconds) ~/
-            60;
+        _minutes = _minutesFor(sent.expiresAt, sent.resendAvailableAt);
         _resendAt = _serverTime(sent.resendAvailableAt);
         _waitUntil = null;
         _previous = null;
@@ -201,7 +216,7 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
     } catch (error) {
       _busy(false);
       if (error is CredflareException && error.status == 409) {
-        widget.onSubmitted();
+        (widget.onClosed ?? widget.onSubmitted)();
         return;
       }
       if (!mounted) return;
@@ -218,21 +233,8 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
         if (_rejected!.action == 'wait') {
           _waitUntil = _waitFor(error);
           _resendAt = _waitUntil;
-          if (_shownDestination == null && target != null) {
-            _codeField.clear();
-            if (_previous case (final shown, final remaining, final minutes)) {
-              _shownDestination = shown;
-              _sendsRemaining = remaining;
-              _minutes = minutes;
-              _changeAfter = true;
-            } else {
-              _shownDestination = target;
-              _sendsRemaining = null;
-              _minutes = SpecRequirements.contactCodesTtlMinutes;
-            }
-            _phase = _Phase.code;
-            _focusCode();
-          }
+          _refusedTo = target ?? _refusedTo;
+          _restoreWaiting(error, target);
         }
       } else if (error is CredflareException && error.status == 401) {
         _error = copy(SpecCopyKey.errorsSessionExpired);
@@ -243,6 +245,32 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
       }
     });
     _tick();
+  }
+
+  void _restoreWaiting(CredflareException error, String? target) {
+    final waiting = error.destination;
+    if (target == null ||
+        (_shownDestination != null &&
+            (waiting == null || waiting == _shownDestination))) {
+      return;
+    }
+    final previous = _previous;
+    final known = previous != null && (waiting ?? previous.$1) == previous.$1
+        ? previous
+        : null;
+    if (waiting == null && known == null) return;
+    _codeField.clear();
+    _shownDestination = waiting ?? known!.$1;
+    _sentTo = known?.$2;
+    _sendsRemaining = error.sendsRemaining ?? known?.$3;
+    final expiresAt = error.expiresAt;
+    final resendAt = error.resendAvailableAt;
+    _minutes = expiresAt != null && resendAt != null
+        ? _minutesFor(expiresAt, resendAt)
+        : known?.$4 ?? SpecRequirements.contactCodesTtlMinutes;
+    _changeAfter = _sentTo != target;
+    _phase = _Phase.code;
+    _focusCode();
   }
 
   DateTime _waitFor(CredflareException error) {
@@ -276,8 +304,9 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
       case 'leave':
         widget.onLeave(rejected.code);
       case 'new_code':
+        _send(resend: true);
       case 'wait':
-        _send();
+        _send(to: _refusedTo, resend: _refusedTo == null);
       case 'reenter_code':
         _codeField.clear();
         setState(() {
@@ -289,6 +318,20 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
         setState(() => _rejection = null);
     }
   }
+
+  void _changeDestination() => setState(() {
+    if (_shownDestination case final shown?) {
+      _previous = (shown, _sentTo, _sendsRemaining, _minutes);
+    }
+    _changeAfter = false;
+    _phase = _Phase.destination;
+    _shownDestination = null;
+    _sentTo = null;
+    _sendsRemaining = null;
+    _rejection = null;
+    _waitUntil = null;
+    _error = null;
+  });
 
   List<Widget> _destinationStep(ThemeData theme) {
     final sending = _phase == _Phase.sending;
@@ -404,7 +447,7 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
       if (remaining != 0 && _rejected == null) ...[
         const SizedBox(height: 8),
         TextButton(
-          onPressed: confirming || wait > 0 ? null : _send,
+          onPressed: confirming || wait > 0 ? null : () => _send(resend: true),
           child: Text(copy(SpecCopyKey.contactCodeResend)),
         ),
         if (wait > 0)
@@ -422,20 +465,7 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
       ],
       const SizedBox(height: 8),
       TextButton(
-        onPressed: confirming
-            ? null
-            : () => setState(() {
-                if (_shownDestination case final shown?) {
-                  _previous = (shown, _sendsRemaining, _minutes);
-                }
-                _changeAfter = false;
-                _phase = _Phase.destination;
-                _shownDestination = null;
-                _sendsRemaining = null;
-                _rejection = null;
-                _waitUntil = null;
-                _error = null;
-              }),
+        onPressed: confirming ? null : _changeDestination,
         child: Text(
           copy(_email ? SpecCopyKey.emailChange : SpecCopyKey.phoneChange),
         ),
