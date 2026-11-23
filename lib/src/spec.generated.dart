@@ -1,9 +1,9 @@
 // GENERATED FILE, DO NOT EDIT.
-// Source: credflare sdk-spec 1.1.0 (6824e65d1864). Regenerate with scripts/generate.mjs.
+// Source: credflare sdk-spec 1.1.0 (1489c6c1b827). Regenerate with scripts/generate.mjs.
 // ignore_for_file: type=lint
 
 const String credflareSpecVersion = '1.1.0';
-const String credflareSpecHash = '6824e65d1864';
+const String credflareSpecHash = '1489c6c1b827';
 
 /// One step of a gesture. value and holdFrames name a threshold key.
 final class SpecGestureStep {
@@ -620,6 +620,10 @@ abstract final class SpecCopy {
     'questions.invalid_email': 'Enter a valid email address.',
     'questions.invalid_phone': 'Enter a valid phone number.',
     'questions.text_too_long': 'Use at most 5000 characters.',
+    'questions.founders_name': 'Founder name',
+    'questions.founders_add': 'Add a founder',
+    'questions.founders_remove': 'Remove',
+    'questions.founders_includes_me': 'I am one of the founders',
     'handoff.action': 'Continue on your phone',
     'handoff.title': 'Continue on your phone',
     'handoff.body': 'Scan this code with your phone camera to carry on there. The code works once and expires in {minutes} minutes.',
@@ -902,6 +906,10 @@ abstract final class SpecCopyKey {
   static const String questionsInvalidEmail = 'questions.invalid_email';
   static const String questionsInvalidPhone = 'questions.invalid_phone';
   static const String questionsTextTooLong = 'questions.text_too_long';
+  static const String questionsFoundersName = 'questions.founders_name';
+  static const String questionsFoundersAdd = 'questions.founders_add';
+  static const String questionsFoundersRemove = 'questions.founders_remove';
+  static const String questionsFoundersIncludesMe = 'questions.founders_includes_me';
   static const String handoffAction = 'handoff.action';
   static const String handoffTitle = 'handoff.title';
   static const String handoffBody = 'handoff.body';
@@ -1318,6 +1326,7 @@ abstract final class SpecRequirements {
   static const String showIfDefaultMatch = 'all';
   static const int showIfMaxConditions = 10;
   static const String showIfPathPrefix = 'form.';
+  static const String showIfEarlierAnswers = 'profile.form_answers';
   static const List<String> showIfOperators = [
     'equals',
     'not_equals',
