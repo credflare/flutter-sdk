@@ -376,7 +376,7 @@ class _ContactCodeState extends State<CredflareContactCodeCapture> {
           labelText: copy(SpecCopyKey.contactCodeLabel),
         ),
       ),
-      if (_changeAfter) ...[
+      if (_changeAfter && wait > 0) ...[
         const SizedBox(height: 8),
         CredflareBody(
           copy(

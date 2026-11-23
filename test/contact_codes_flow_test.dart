@@ -551,6 +551,7 @@ void main() {
     expect(find.text(copy(SpecCopyKey.phoneChangeAfter)), findsOneWidget);
     now = at;
     await tester.pump(const Duration(seconds: 1));
+    expect(find.text(copy(SpecCopyKey.phoneChangeAfter)), findsNothing);
     await tapText(tester, label);
     await settle(tester);
     final sends = posts(backend, '/phone-codes');
