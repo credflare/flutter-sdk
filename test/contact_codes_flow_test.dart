@@ -161,6 +161,55 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('a closed case reports onClosed instead of a stale session', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.add(contactSession('phone_verification'))
+      ..closedAfterSubmit = fixture('session-closed');
+    var submitted = 0;
+    var closed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CredflareVerification(
+          autoStart: true,
+          onClose: () {},
+          onSubmitted: (_) => submitted++,
+          onClosed: () => closed++,
+          httpClient: backend.client,
+          sessionProvider: () async => descriptor(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await sendDestination(tester, ContactChannel.phone, '+237650000001');
+    await confirmCode(tester, '123456');
+    expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+    expect(closed, 1);
+    expect(submitted, 0);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'a confirmation refused because the case closed shows the receipt',
+    (tester) async {
+      final backend = Backend()
+        ..sessions.add(contactSession('phone_verification'))
+        ..closedAfterSubmit = fixture('session-closed')
+        ..closeOnPost = true;
+      await tester.pumpWidget(flow(backend));
+      await tester.pumpAndSettle();
+      await sendDestination(tester, ContactChannel.phone, '+237650000001');
+      await confirmCode(tester, '123456');
+      expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+      expect(
+        find.text(fixture('session-closed')['message'] as String),
+        findsNothing,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   testWidgets('removing the flow while a code is confirmed is safe', (
     tester,
   ) async {
@@ -487,6 +536,18 @@ void main() {
     await sendDestination(tester, ContactChannel.phone, '+237650000002');
     final label = copy(SpecRejection.actionLabels['wait']!);
     expect(find.text(copy(SpecCopyKey.contactCodeTitle)), findsOneWidget);
+    final sent = fixture('phone-code-request')['data'];
+    expect(
+      find.text(
+        copy(SpecCopyKey.contactCodeBody, {
+          'destination': sent['destination'],
+          'minutes': SpecRequirements.contactCodesTtlMinutes,
+        }),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('+237650000002'), findsNothing);
+    expect(find.text(copy(SpecCopyKey.phoneChangeAfter)), findsOneWidget);
     now = at;
     await tester.pump(const Duration(seconds: 1));
     await tapText(tester, label);

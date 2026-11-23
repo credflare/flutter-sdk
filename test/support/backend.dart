@@ -33,6 +33,7 @@ class Backend {
   final confirmRejections = <Map<String, dynamic>>[];
   Map<String, dynamic>? formRejection;
   Completer<void>? holdSubmit;
+  var closeOnPost = false;
   late final MockClient client = MockClient((request) async {
     final path = request.url.path;
     final fields = path.contains('/uploads/')
@@ -84,6 +85,9 @@ class Backend {
         (path.endsWith('/submit') || path.endsWith('-codes/confirm'))) {
       await holdSubmit?.future;
       _submitted = true;
+      if (closeOnPost && closedAfterSubmit != null) {
+        return http.Response(jsonEncode(closedAfterSubmit), 409);
+      }
     }
     if (path.endsWith('-codes/confirm')) {
       if (confirmRejections.isNotEmpty) {

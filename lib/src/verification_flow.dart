@@ -23,10 +23,14 @@ class CredflareVerification extends StatefulWidget {
   final VoidCallback onClose;
 
   /// Called with the session once everything the SDK can collect is sent.
-  /// When the case closed before it could be fetched again, this is the last
-  /// session fetched, so it can still list the step just finished as
-  /// outstanding.
+  /// When the case closed before it could be fetched again and [onClosed] is
+  /// not set, this is the last session fetched, so it can still list the step
+  /// just finished as outstanding.
   final void Function(Map<String, dynamic> session)? onSubmitted;
+
+  /// Called instead of [onSubmitted] when the case closed after a submission,
+  /// since no current session can be fetched for a closed case.
+  final VoidCallback? onClosed;
   final VoidCallback? onCancelled;
 
   /// Called with the rejection code when nothing more can be done in the app
@@ -41,6 +45,7 @@ class CredflareVerification extends StatefulWidget {
     required this.sessionProvider,
     required this.onClose,
     this.onSubmitted,
+    this.onClosed,
     this.onCancelled,
     this.onHostActionRequired,
     this.autoStart = false,
@@ -193,7 +198,11 @@ class _VerificationState extends State<CredflareVerification> {
           _closed = true;
           _pendingReceipt = false;
         });
-        widget.onSubmitted?.call(_info!);
+        if (widget.onClosed case final onClosed?) {
+          onClosed();
+        } else {
+          widget.onSubmitted?.call(_info!);
+        }
         return;
       }
       if (mounted) {
