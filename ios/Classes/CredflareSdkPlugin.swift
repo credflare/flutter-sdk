@@ -1,3 +1,4 @@
+import CoreML
 import CoreVideo
 import Flutter
 import UIKit
@@ -45,12 +46,14 @@ enum VisionFaceReader {
   static func read(handler: VNImageRequestHandler, size: CGSize) -> [String: Any] {
     let rectangles = VNDetectFaceRectanglesRequest()
     rectangles.revision = VNDetectFaceRectanglesRequestRevision3
+    onSimulatorUseCPU(rectangles)
     do { try handler.perform([rectangles]) } catch { return ["faces": 0] }
     let faces = rectangles.results ?? []
     guard faces.count == 1, let face = faces.first else { return ["faces": faces.count] }
     let landmarks = VNDetectFaceLandmarksRequest()
     landmarks.revision = VNDetectFaceLandmarksRequestRevision3
     landmarks.inputFaceObservations = [face]
+    onSimulatorUseCPU(landmarks)
     try? handler.perform([landmarks])
     let marks = landmarks.results?.first?.landmarks
     let box = face.boundingBox
@@ -70,6 +73,22 @@ enum VisionFaceReader {
       reading["mouth_ratio"] = ratio
     }
     return reading
+  }
+
+  // Simulators have no neural engine, so Vision cannot create its default inference context there.
+  static func onSimulatorUseCPU(_ request: VNRequest) {
+    #if targetEnvironment(simulator)
+    if #available(iOS 17.0, *) {
+      guard let stages = try? request.supportedComputeStageDevices else { return }
+      for (stage, devices) in stages {
+        if let cpu = devices.first(where: { if case .cpu = $0 { return true } else { return false } }) {
+          request.setComputeDevice(cpu, for: stage)
+        }
+      }
+    } else {
+      request.usesCPUOnly = true
+    }
+    #endif
   }
 
   static func eyeAspectRatio(_ points: [CGPoint]) -> Double? {
