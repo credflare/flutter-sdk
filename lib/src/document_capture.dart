@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:camera/camera.dart' show availableCameras;
 import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart' as files;
 import 'capture_plan.dart';
@@ -69,6 +70,14 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
     widget.onBusyChanged?.call(value);
   }
 
+  Future<bool> _hasCamera() async {
+    try {
+      return (await availableCameras()).isNotEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
   Future<void> _pick(CaptureStep step, String source) async {
     if (_busy) return;
     _setBusy(true);
@@ -78,6 +87,9 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
     try {
       files.XFile? selected;
       if (source == 'camera') {
+        if (!await _hasCamera()) {
+          throw StateError(copy(SpecCopyKey.errorsCameraUnavailable));
+        }
         selected = await ImagePicker().pickImage(
           source: ImageSource.camera,
           imageQuality: 95,
