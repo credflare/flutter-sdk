@@ -453,6 +453,13 @@ void main() {
     expect(location.maxAccuracyM, 100);
     expect(location.reference, isNull);
   });
+  test('ignores settings keys the SDK does not know', () {
+    final facial = FacialSettings.fromJson({
+      'gesture_count': 2,
+      'video_retention_days': 30,
+    });
+    expect(facial.gestureCount, 2);
+  });
   test('rejects remote HTTP API destinations', () {
     expect(
       () => SessionDescriptor.fromJson({

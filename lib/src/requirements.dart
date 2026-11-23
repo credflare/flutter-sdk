@@ -4,12 +4,10 @@ class FacialSettings {
   final List<String> gestures;
   final int gestureCount;
   final bool recordVideo;
-  final int videoRetentionDays;
   const FacialSettings({
     required this.gestures,
     required this.gestureCount,
     required this.recordVideo,
-    required this.videoRetentionDays,
   });
 
   factory FacialSettings.fromJson(Map? json) => FacialSettings(
@@ -22,9 +20,6 @@ class FacialSettings {
     recordVideo:
         json?['record_video'] as bool? ??
         SpecSettings.facialVerificationRecordVideoDefault,
-    videoRetentionDays:
-        (json?['video_retention_days'] as num?)?.toInt() ??
-        SpecSettings.facialVerificationVideoRetentionDaysDefault,
   );
 }
 
