@@ -1,9 +1,9 @@
 // GENERATED FILE, DO NOT EDIT.
-// Source: credflare sdk-spec 1.1.0 (f30a34ca3aac). Regenerate with scripts/generate.mjs.
+// Source: credflare sdk-spec 1.1.0 (0532d98b68cc). Regenerate with scripts/generate.mjs.
 // ignore_for_file: type=lint
 
 const String credflareSpecVersion = '1.1.0';
-const String credflareSpecHash = 'f30a34ca3aac';
+const String credflareSpecHash = '0532d98b68cc';
 
 /// One step of a gesture. value and holdFrames name a threshold key.
 final class SpecGestureStep {
@@ -244,15 +244,6 @@ abstract final class SpecSettings {
       max: null,
       options: [],
       defaultJson: 'true',
-    ),
-    SpecSetting(
-      path: 'facial_verification.video_retention_days',
-      type: 'int',
-      optional: true,
-      min: 1.0,
-      max: 3650.0,
-      options: [],
-      defaultJson: 'null',
     ),
     SpecSetting(
       path: 'location_verification.max_accuracy_m',
