@@ -808,10 +808,11 @@ void main() {
       expect(
         find.descendant(
           of: clear,
-          matching: find.byTooltip(copy(SpecCopyKey.questionsFoundersRemove)),
+          matching: find.text(copy(SpecCopyKey.questionsFoundersRemove)),
         ),
         findsOneWidget,
       );
+      await tester.ensureVisible(clear);
       await tester.tap(clear);
       await tester.pumpAndSettle();
       expect(
@@ -837,7 +838,18 @@ void main() {
       ]);
     await tester.pumpWidget(flow(backend));
     await tester.pumpAndSettle();
-    await choose(tester, 'employment', copy(SpecCopyKey.questionsChooseOne));
+    final clear = find.byKey(const ValueKey('question-employment-clear'));
+    expect(
+      find.descendant(
+        of: clear,
+        matching: find.text(copy(SpecCopyKey.questionsFoundersRemove)),
+      ),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(clear);
+    await tester.tap(clear);
+    await tester.pumpAndSettle();
+    expect(clear, findsNothing);
     expect(
       find.descendant(
         of: question('employment'),

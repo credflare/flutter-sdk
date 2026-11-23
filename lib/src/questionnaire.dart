@@ -751,19 +751,23 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
           ),
         );
 
-  Widget? _clearable(Map<String, dynamic> q, bool enabled) {
+  Widget _clearable(Map<String, dynamic> q, bool enabled) {
     final key = q['key'] as String;
-    if (q['required'] == true || _values[key] == null) return null;
-    return IconButton(
-      key: ValueKey('question-$key-clear'),
-      tooltip: copy(SpecCopyKey.questionsFoundersRemove),
-      icon: const Icon(Icons.close),
-      onPressed: enabled
-          ? () {
-              _values[key] = null;
-              _changed();
-            }
-          : null,
+    if (q['required'] == true || _values[key] == null) {
+      return const SizedBox.shrink();
+    }
+    return Align(
+      alignment: AlignmentDirectional.centerEnd,
+      child: TextButton(
+        key: ValueKey('question-$key-clear'),
+        onPressed: enabled
+            ? () {
+                _values[key] = null;
+                _changed();
+              }
+            : null,
+        child: Text(copy(SpecCopyKey.questionsFoundersRemove)),
+      ),
     );
   }
 
@@ -849,9 +853,7 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
                   hintText: copy(SpecCopyKey.questionsChooseCountry),
                   errorText: error,
                   enabled: enabled,
-                  suffixIcon:
-                      _clearable(q, enabled) ??
-                      const Icon(Icons.arrow_drop_down),
+                  suffixIcon: const Icon(Icons.arrow_drop_down),
                 ),
                 child: name == null
                     ? null
@@ -861,6 +863,7 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
                       ),
               ),
             ),
+            _clearable(q, enabled),
           ],
         );
       case 'select' || 'single_select':
@@ -868,35 +871,31 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _label(theme, q),
-            DropdownButtonFormField<String>(
-              key: ValueKey('question-$key'),
-              initialValue: _values[key] as String?,
-              isExpanded: true,
-              menuMaxHeight: 420,
-              hint: Text(copy(SpecCopyKey.questionsChooseOne)),
-              decoration: InputDecoration(errorText: error),
-              items: [
-                if (q['required'] != true && _values[key] != null)
-                  DropdownMenuItem<String>(
-                    value: null,
-                    child: Text(
-                      copy(SpecCopyKey.questionsChooseOne),
-                      overflow: TextOverflow.ellipsis,
+            KeyedSubtree(
+              key: ValueKey(_values[key] == null),
+              child: DropdownButtonFormField<String>(
+                key: ValueKey('question-$key'),
+                initialValue: _values[key] as String?,
+                isExpanded: true,
+                menuMaxHeight: 420,
+                hint: Text(copy(SpecCopyKey.questionsChooseOne)),
+                decoration: InputDecoration(errorText: error),
+                items: [
+                  for (final item in options)
+                    DropdownMenuItem(
+                      value: item,
+                      child: Text(item, overflow: TextOverflow.ellipsis),
                     ),
-                  ),
-                for (final item in options)
-                  DropdownMenuItem(
-                    value: item,
-                    child: Text(item, overflow: TextOverflow.ellipsis),
-                  ),
-              ],
-              onChanged: enabled
-                  ? (v) {
-                      _values[key] = v;
-                      _changed();
-                    }
-                  : null,
+                ],
+                onChanged: enabled
+                    ? (v) {
+                        _values[key] = v;
+                        _changed();
+                      }
+                    : null,
+              ),
             ),
+            _clearable(q, enabled),
           ],
         );
       case 'founders':
@@ -978,10 +977,7 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
               controller: controller,
               readOnly: true,
               enabled: enabled,
-              decoration: InputDecoration(
-                errorText: error,
-                suffixIcon: _clearable(q, enabled),
-              ),
+              decoration: InputDecoration(errorText: error),
               onTap: () async {
                 final initial = value != null && _realDate(value)
                     ? DateTime.parse(value)
@@ -997,6 +993,7 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
                 _changed();
               },
             ),
+            _clearable(q, enabled),
           ],
         );
       default:
