@@ -201,8 +201,9 @@ bool _fuzzy(Object? actual, Object? expected) {
   if (!_isScalar(actual) || expected is! Map || !_isScalar(expected['text'])) {
     return false;
   }
-  String normalize(Object? v) =>
-      _lower(_text(v)).trim().replaceAll(RegExp(r'\s+'), ' ');
+  String normalize(Object? v) => String.fromCharCodes(
+    _lower(_text(v)).trim().replaceAll(RegExp(r'\s+'), ' ').runes.take(200),
+  );
   final score =
       expected['min_score'] ?? SpecRequirements.showIfFuzzyDefaultMinScore;
   if (!_isNumeric(score)) return false;

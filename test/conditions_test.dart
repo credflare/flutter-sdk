@@ -10,7 +10,7 @@ void main() {
   test('the fixture holds every backend case', () {
     expect(
       (cases['conditions'] as List).length + (cases['show_if'] as List).length,
-      62,
+      65,
     );
   });
 
