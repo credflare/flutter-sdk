@@ -81,6 +81,11 @@ class Backend {
       raw['data']['id'] = nextFileId++;
       return http.Response(jsonEncode(raw), 201);
     }
+    if (path.contains('/uploads/')) {
+      final raw = fixture('upload', root: root);
+      raw['data']['id'] = nextFileId++;
+      return http.Response(jsonEncode(raw), 201);
+    }
     if (request.method == 'POST' &&
         (path.endsWith('/submit') || path.endsWith('-codes/confirm'))) {
       await holdSubmit?.future;

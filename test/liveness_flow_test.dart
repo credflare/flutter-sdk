@@ -759,4 +759,65 @@ void main() {
     await show([]);
     only(null);
   });
+
+  testWidgets('a location refused because the case closed shows the receipt', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.add(withRequirements(['location_verification']))
+      ..closedAfterSubmit = fixture('session-closed')
+      ..closeOnPost = true;
+    var closed = 0;
+    Map<String, dynamic>? submitted;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CredflareVerification(
+          autoStart: true,
+          onClose: () {},
+          onClosed: () => closed++,
+          onSubmitted: (info) => submitted = info,
+          httpClient: backend.client,
+          sessionProvider: () async => descriptor(),
+          locationSource: FakeLocationSource([() => locationFix()]),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapText(tester, copy(SpecCopyKey.locationShare));
+    await tester.pumpAndSettle();
+    await tapText(tester, copy(SpecCopyKey.locationSend));
+    await tester.pumpAndSettle();
+    expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+    expect(find.text(copy(SpecCopyKey.receiptLocation)), findsNothing);
+    expect(
+      find.text(fixture('session-closed')['message'] as String),
+      findsNothing,
+    );
+    expect(backend.requests.where((r) => r.method == 'GET'), hasLength(1));
+    expect(closed, 1);
+    expect(submitted, isNull);
+  });
+
+  testWidgets('a selfie refused because the case closed shows the receipt', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.add(withRequirements(['facial_verification']))
+      ..closedAfterSubmit = fixture('session-closed')
+      ..closeOnPost = true;
+    final sources = <FakeLivenessSource>[];
+    await tester.pumpWidget(facialApp(backend, sources));
+    await tester.pumpAndSettle();
+    await recordChallenge(tester, () => sources.last);
+    await tapText(tester, copy(SpecCopyKey.selfieSend));
+    await tester.pumpAndSettle();
+    expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+    expect(find.text(copy(SpecCopyKey.receiptSelfie)), findsNothing);
+    expect(
+      find.text(fixture('session-closed')['message'] as String),
+      findsNothing,
+    );
+    expect(backend.requests.where((r) => r.method == 'GET'), hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+  });
 }

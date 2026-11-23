@@ -20,6 +20,10 @@ class CredflareDocumentCapture extends StatefulWidget {
   final void Function(bool busy)? onBusyChanged;
   final void Function(bool dirty)? onDirtyChanged;
   final String? requesterName;
+
+  /// Called instead of reporting an error when the submission is refused
+  /// because the case closed, so nothing was recorded.
+  final VoidCallback? onClosed;
   const CredflareDocumentCapture({
     super.key,
     required this.session,
@@ -30,6 +34,7 @@ class CredflareDocumentCapture extends StatefulWidget {
     this.onBusyChanged,
     this.onDirtyChanged,
     this.requesterName,
+    this.onClosed,
   });
   @override
   State<CredflareDocumentCapture> createState() => _DocumentCaptureState();
@@ -224,6 +229,12 @@ class _DocumentCaptureState extends State<CredflareDocumentCapture> {
       }, key: _submitKey);
       if (mounted) widget.onSubmitted(id);
     } catch (error) {
+      if (error is CredflareException &&
+          error.status == 409 &&
+          widget.onClosed != null) {
+        if (mounted) widget.onClosed!();
+        return;
+      }
       if (mounted) {
         setState(() {
           _error = error is CredflareException && error.status != 0

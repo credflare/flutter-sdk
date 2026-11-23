@@ -19,6 +19,10 @@ class CredflareLocationCapture extends StatefulWidget {
   final VoidCallback onSubmitted;
   final ValueChanged<bool> onBusyChanged;
   final DateTime Function() now;
+
+  /// Called instead of reporting an error when the submission is refused
+  /// because the case closed, so nothing was recorded.
+  final VoidCallback? onClosed;
   const CredflareLocationCapture({
     super.key,
     required this.session,
@@ -28,6 +32,7 @@ class CredflareLocationCapture extends StatefulWidget {
     required this.onSubmitted,
     required this.onBusyChanged,
     this.now = DateTime.now,
+    this.onClosed,
   });
   @override
   State<CredflareLocationCapture> createState() => _LocationState();
@@ -142,6 +147,12 @@ class _LocationState extends State<CredflareLocationCapture> {
       widget.onSubmitted();
     } catch (error) {
       widget.onBusyChanged(false);
+      if (error is CredflareException &&
+          error.status == 409 &&
+          widget.onClosed != null) {
+        widget.onClosed!();
+        return;
+      }
       if (!mounted) return;
       final rejected = error is CredflareException && error.status == 422;
       setState(() {

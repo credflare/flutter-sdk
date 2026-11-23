@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:credflare_sdk/credflare_sdk.dart';
 import 'package:flutter/material.dart';
@@ -14,13 +15,14 @@ class FakeCameras extends CameraPlatform {
 
 class FakePicker extends ImagePickerPlatform {
   final sources = <ImageSource>[];
+  XFile? photo;
   @override
   Future<XFile?> getImageFromSource({
     required ImageSource source,
     ImagePickerOptions options = const ImagePickerOptions(),
   }) async {
     sources.add(source);
-    return null;
+    return photo;
   }
 }
 
@@ -34,10 +36,14 @@ void main() {
     ImagePickerPlatform.instance = picker;
   });
 
-  Future<void> openDocument(WidgetTester tester, String method) async {
+  Future<void> openDocument(
+    WidgetTester tester,
+    String method, {
+    Backend? backend,
+  }) async {
     final raw = captureSession(method);
     raw['data']['profile']['form_schema'] = null;
-    final backend = Backend()..sessions.add(raw);
+    backend = (backend ?? Backend())..sessions.add(raw);
     await tester.pumpWidget(
       MaterialApp(
         home: CredflareVerification(
@@ -102,6 +108,53 @@ void main() {
     await takePhoto(tester);
     expect(picker.sources, [ImageSource.camera]);
     expect(find.text(copy(SpecCopyKey.errorsCameraUnavailable)), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a document refused because the case closed shows the receipt', (
+    tester,
+  ) async {
+    cameras.cameras = [
+      const CameraDescription(
+        name: '0',
+        lensDirection: CameraLensDirection.back,
+        sensorOrientation: 90,
+      ),
+    ];
+    picker.photo = XFile.fromData(
+      File('assets/credflare-mark.png').readAsBytesSync(),
+      path: 'side.png',
+    );
+    final backend = Backend()
+      ..closedAfterSubmit = fixture('session-closed')
+      ..closeOnPost = true;
+    await openDocument(tester, 'snapshot', backend: backend);
+    final send = copy(SpecCopyKey.reviewSend);
+    for (var i = 0; i < 6 && find.text(send).evaluate().isEmpty; i++) {
+      final take = find.text(copy(SpecCopyKey.captureTakePhoto));
+      if (take.evaluate().isNotEmpty) {
+        await takePhoto(tester);
+        continue;
+      }
+      final next = find.byType(FilledButton).last;
+      await tester.ensureVisible(next);
+      await tester.tap(next);
+      await tester.pumpAndSettle();
+    }
+    final gets = backend.requests.where((r) => r.method == 'GET').length;
+    await tester.ensureVisible(find.text(send).last);
+    await tester.tap(find.text(send).last);
+    await tester.pumpAndSettle();
+    expect(
+      backend.requests.where((r) => r.path.endsWith('/submit')),
+      hasLength(1),
+    );
+    expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+    expect(
+      find.text(fixture('session-closed')['message'] as String),
+      findsNothing,
+    );
+    expect(backend.requests.where((r) => r.method == 'GET'), hasLength(gets));
     await tester.pumpWidget(const SizedBox());
   });
 }

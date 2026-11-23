@@ -22,6 +22,10 @@ class CredflareLivenessCapture extends StatefulWidget {
   final VoidCallback onSubmitted;
   final ValueChanged<bool> onBusyChanged;
   final DateTime Function() now;
+
+  /// Called instead of reporting an error when the submission is refused
+  /// because the case closed, so nothing was recorded.
+  final VoidCallback? onClosed;
   const CredflareLivenessCapture({
     super.key,
     required this.session,
@@ -31,6 +35,7 @@ class CredflareLivenessCapture extends StatefulWidget {
     required this.onSubmitted,
     required this.onBusyChanged,
     this.now = DateTime.now,
+    this.onClosed,
   });
   @override
   State<CredflareLivenessCapture> createState() => _LivenessState();
@@ -335,6 +340,12 @@ class _LivenessState extends State<CredflareLivenessCapture> {
       widget.onSubmitted();
     } catch (error) {
       widget.onBusyChanged(false);
+      if (error is CredflareException &&
+          error.status == 409 &&
+          widget.onClosed != null) {
+        widget.onClosed!();
+        return;
+      }
       if (!mounted) return;
       final validation = error is CredflareException && error.status == 422;
       setState(() {

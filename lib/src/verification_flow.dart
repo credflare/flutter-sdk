@@ -23,13 +23,12 @@ class CredflareVerification extends StatefulWidget {
   final VoidCallback onClose;
 
   /// Called with the session once everything the SDK can collect is sent.
-  /// When the case closed before it could be fetched again and [onClosed] is
-  /// not set, this is the last session fetched, so it can still list the step
-  /// just finished as outstanding.
+  /// Not called when the case closed, since no current session can be
+  /// fetched for a closed case; see [onClosed].
   final void Function(Map<String, dynamic> session)? onSubmitted;
 
-  /// Called instead of [onSubmitted] when the case closed after a submission,
-  /// since no current session can be fetched for a closed case.
+  /// Called when the case turned out to be closed after or during a
+  /// submission or code confirmation. The flow then shows the receipt.
   final VoidCallback? onClosed;
   final VoidCallback? onCancelled;
 
@@ -193,16 +192,7 @@ class _VerificationState extends State<CredflareVerification> {
       if (_allReceived) widget.onSubmitted?.call(info);
     } catch (error) {
       if (error is CredflareException && error.status == 409) {
-        if (!mounted) return;
-        setState(() {
-          _closed = true;
-          _pendingReceipt = false;
-        });
-        if (widget.onClosed case final onClosed?) {
-          onClosed();
-        } else {
-          widget.onSubmitted?.call(_info!);
-        }
+        _closedCase();
         return;
       }
       if (mounted) {
@@ -219,6 +209,20 @@ class _VerificationState extends State<CredflareVerification> {
         });
       }
     }
+  }
+
+  void _closedCase() {
+    if (!mounted || _closed) return;
+    setState(() {
+      _closed = true;
+      _leaveCode = null;
+      _document = null;
+      _captureDirty = false;
+      _captureBusy = false;
+      _pendingReceipt = false;
+      _error = null;
+    });
+    widget.onClosed?.call();
   }
 
   Future<bool> _confirm({
@@ -465,6 +469,7 @@ class _VerificationState extends State<CredflareVerification> {
               _refresh(copy(SpecCopyKey.receiptDocument, {'document': name})),
           onBusyChanged: _busy,
           onDirtyChanged: (dirty) => _captureDirty = dirty,
+          onClosed: _closedCase,
         ),
       ];
     }
@@ -481,6 +486,7 @@ class _VerificationState extends State<CredflareVerification> {
           },
           onBusyChanged: _busy,
           onUnsupported: () => setState(() => _questionsToHost = true),
+          onClosed: _closedCase,
         ),
       ];
     }
@@ -506,6 +512,7 @@ class _VerificationState extends State<CredflareVerification> {
             widget.onClose();
           },
           onLeaveCodeChanged: (code) => _leaveCode = code,
+          onClosed: _closedCase,
           onBusyChanged: _busy,
         ),
       ];
@@ -519,6 +526,7 @@ class _VerificationState extends State<CredflareVerification> {
           sourceFactory: widget.livenessSource,
           onSubmitted: () => _refresh(copy(SpecCopyKey.receiptSelfie)),
           onBusyChanged: _busy,
+          onClosed: _closedCase,
         ),
       ];
     }
@@ -531,6 +539,7 @@ class _VerificationState extends State<CredflareVerification> {
           source: widget.locationSource,
           onSubmitted: () => _refresh(copy(SpecCopyKey.receiptLocation)),
           onBusyChanged: _busy,
+          onClosed: _closedCase,
         ),
       ];
     }
