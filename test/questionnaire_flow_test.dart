@@ -415,6 +415,145 @@ void main() {
     expect(lastSubmit(backend)['fields'], {'employment': 'Student'});
   });
 
+  testWidgets('a form of optional questions left empty sends no fields', (
+    tester,
+  ) async {
+    final session = questionnaireWith((schema) {
+      schema.retainWhere((q) => q['key'] == 'contact_email');
+    });
+    final backend = Backend()
+      ..sessions.addAll([session, fixture('requirement-added-session')]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(lastSubmit(backend)['fields'], <String, Object?>{});
+  });
+
+  testWidgets('clearing an earlier answer asked again sends it as empty', (
+    tester,
+  ) async {
+    final session = fixture('questionnaire-earlier-answers-session');
+    final profile = session['data']['profile'] as Map<String, dynamic>;
+    final employer = (profile['form_schema'] as List).single as Map;
+    employer['required'] = false;
+    (profile['form_answers'] as Map)['employer'] = 'Acme';
+    (profile['form_schema'] as List).add({
+      ...employer,
+      'key': 'employer_note',
+      'show_if': {
+        'conditions': [
+          {'path': 'form.employer', 'op': 'equals', 'value': 'Acme'},
+        ],
+      },
+    });
+    final backend = Backend()
+      ..sessions.addAll([session, fixture('requirement-added-session')]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('question-employer')))
+          .controller!
+          .text,
+      'Acme',
+    );
+    expect(question('employer_note'), findsOneWidget);
+    await type(tester, 'employer', '');
+    expect(question('employer_note'), findsNothing);
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(lastSubmit(backend)['fields'], {'employer': null});
+  });
+
+  testWidgets('changed answers after a lost response get a new request key', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.addAll([
+        fixture('questionnaire-session'),
+        fixture('requirement-added-session'),
+      ])
+      ..dropNextSubmit = true;
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    await answerRequired(tester);
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(
+      find.text(copy(SpecCopyKey.errorsSendAnswersFailed)),
+      findsOneWidget,
+    );
+    final first = backend.requests.lastWhere((r) => r.path.endsWith('/submit'));
+    backend.dropNextSubmit = true;
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    final same = backend.requests.lastWhere((r) => r.path.endsWith('/submit'));
+    expect(same.key, first.key);
+    await type(tester, 'contact_email', 'jane@example.test');
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    final changed = backend.requests.lastWhere(
+      (r) => r.path.endsWith('/submit'),
+    );
+    expect(changed.key, isNot(first.key));
+    expect(find.text(copy(SpecCopyKey.phoneTitle)), findsOneWidget);
+  });
+
+  testWidgets('answers refused because the case closed show the receipt', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.add(fixture('questionnaire-session'))
+      ..closedAfterSubmit = fixture('session-closed')
+      ..closeOnPost = true;
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    await answerRequired(tester);
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
+    expect(find.text(copy(SpecCopyKey.receiptAnswers)), findsOneWidget);
+  });
+
+  testWidgets('the questionnaire on its own reads earlier answers from info', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.add(fixture('questionnaire-earlier-answers-session'));
+    final session = CredflareSession(descriptor(), client: backend.client);
+    final info = await session.get();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: CredflareQuestionnaire(
+              session: session,
+              info: info,
+              onSubmitted: (_) {},
+              onBusyChanged: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(question('employer'), findsOneWidget);
+  });
+
+  testWidgets('text length counts characters, not UTF-16 units', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.addAll([
+        fixture('questionnaire-session'),
+        fixture('requirement-added-session'),
+      ]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    await answerRequired(tester);
+    await choose(tester, 'employment', 'Employed');
+    final long =
+        '\u{1F600}' * (SpecRequirements.questionsTextMaxLength ~/ 2 + 1);
+    await type(tester, 'employer', long);
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(find.text(copy(SpecCopyKey.questionsTextTooLong)), findsNothing);
+    expect((lastSubmit(backend)['fields'] as Map)['employer'], long);
+  });
+
   testWidgets('the date picker reaches dates before 1900', (tester) async {
     final backend = Backend()
       ..sessions.addAll([

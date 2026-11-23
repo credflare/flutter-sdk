@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'client.dart';
@@ -366,14 +367,19 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
   Rejection? _rejected;
   String? _error;
   String _key = requestKey();
+  String? _keyFor;
+  late final Map<String, Object?> _earlier = {
+    ...widget.earlierAnswers,
+    ...formAnswers(widget.info),
+  };
 
   @override
   void initState() {
     super.initState();
     for (final q in _questions) {
       final key = q['key'] as String;
-      if (!widget.earlierAnswers.containsKey(key)) continue;
-      final value = widget.earlierAnswers[key];
+      if (!_earlier.containsKey(key)) continue;
+      final value = _earlier[key];
       switch (_type(q)) {
         case 'consent':
           _values[key] = value == true;
@@ -456,7 +462,7 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
   /// show_if sees only the answers that will be sent.
   (List<Map<String, dynamic>>, Map<String, Object?>) _evaluate() {
     _unsupportedShown = false;
-    final context = Map<String, Object?>.from(widget.earlierAnswers);
+    final context = Map<String, Object?>.from(_earlier);
     final visible = <Map<String, dynamic>>[];
     final fields = <String, Object?>{};
     for (final q in _questions) {
@@ -473,9 +479,8 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
       visible.add(q);
       final value = _answer(q);
       if (_blank(value)) {
-        widget.earlierAnswers.containsKey(key)
-            ? context[key] = widget.earlierAnswers[key]
-            : context.remove(key);
+        context.remove(key);
+        if (_earlier.containsKey(key)) fields[key] = null;
       } else {
         context[key] = value;
         fields[key] = value;
@@ -497,7 +502,7 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
     }
     switch (type) {
       case 'text' || 'textarea':
-        if ((value as String).length >
+        if ((value as String).runes.length >
             SpecRequirements.questionsTextMaxLength) {
           return copy(SpecCopyKey.questionsTextTooLong);
         }
@@ -564,6 +569,9 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
       widget.onUnsupported!();
       return;
     }
+    final payload = jsonEncode(fields);
+    if (_keyFor != null && _keyFor != payload) _key = requestKey();
+    _keyFor = payload;
     setState(() => _sending = true);
     widget.onBusyChanged(true);
     try {
@@ -572,6 +580,10 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
       widget.onSubmitted(fields);
     } catch (error) {
       widget.onBusyChanged(false);
+      if (error is CredflareException && error.status == 409) {
+        widget.onSubmitted(fields);
+        return;
+      }
       if (!mounted) return;
       final rejected = error is CredflareException && error.status == 422;
       setState(() {
