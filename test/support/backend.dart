@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:credflare_sdk/credflare_sdk.dart';
 import 'package:http/http.dart' as http;
@@ -31,6 +32,7 @@ class Backend {
   final codeRejections = <Map<String, dynamic>>[];
   final confirmRejections = <Map<String, dynamic>>[];
   Map<String, dynamic>? formRejection;
+  Completer<void>? holdSubmit;
   late final MockClient client = MockClient((request) async {
     final path = request.url.path;
     final fields = path.contains('/uploads/')
@@ -80,6 +82,7 @@ class Backend {
     }
     if (request.method == 'POST' &&
         (path.endsWith('/submit') || path.endsWith('-codes/confirm'))) {
+      await holdSubmit?.future;
       _submitted = true;
     }
     if (path.endsWith('-codes/confirm')) {

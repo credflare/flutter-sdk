@@ -21,6 +21,11 @@ typedef SessionProvider = Future<SessionDescriptor> Function();
 class CredflareVerification extends StatefulWidget {
   final SessionProvider sessionProvider;
   final VoidCallback onClose;
+
+  /// Called with the session once everything the SDK can collect is sent.
+  /// When the case closed before it could be fetched again, this is the last
+  /// session fetched, so it can still list the step just finished as
+  /// outstanding.
   final void Function(Map<String, dynamic> session)? onSubmitted;
   final VoidCallback? onCancelled;
 
@@ -89,6 +94,7 @@ class _VerificationState extends State<CredflareVerification> {
   bool _pendingReceipt = false;
   bool _closed = false;
   String? _error;
+  String? _leaveCode;
   final _received = <String>[];
   final _answers = <String, Object?>{};
 
@@ -160,9 +166,10 @@ class _VerificationState extends State<CredflareVerification> {
   }
 
   Future<void> _refresh([String? received]) async {
-    if (_loading) return;
+    if (!mounted || _loading) return;
     if (received != null) _received.add(received);
     setState(() {
+      _leaveCode = null;
       _document = null;
       _captureDirty = false;
       _captureBusy = false;
@@ -261,7 +268,11 @@ class _VerificationState extends State<CredflareVerification> {
       stay: copy(SpecCopyKey.exitStay),
       leave: copy(SpecCopyKey.exitLeave),
     )) {
-      widget.onCancelled?.call();
+      if (_leaveCode case final code?) {
+        widget.onHostActionRequired?.call(code);
+      } else {
+        widget.onCancelled?.call();
+      }
       widget.onClose();
     }
   }
@@ -479,6 +490,7 @@ class _VerificationState extends State<CredflareVerification> {
             widget.onHostActionRequired?.call(code);
             widget.onClose();
           },
+          onLeaveCodeChanged: (code) => _leaveCode = code,
           onBusyChanged: _busy,
         ),
       ];

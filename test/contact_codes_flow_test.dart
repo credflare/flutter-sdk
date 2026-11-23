@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:credflare_sdk/credflare_sdk.dart';
 import 'package:flutter/material.dart';
@@ -118,19 +119,6 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(
-      find.text(
-        copy(SpecCopyKey.contactCodeResendIn, {
-          'seconds': SpecRequirements.contactCodesResendSeconds,
-        }),
-      ),
-      findsOneWidget,
-    );
-    final resend = tester.widget<TextButton>(
-      find.widgetWithText(TextButton, copy(SpecCopyKey.contactCodeResend)),
-    );
-    expect(resend.onPressed, isNull);
-
     await confirmCode(tester, '123456');
     final confirm = posts(backend, '/phone-codes/confirm').single;
     expect(jsonDecode(confirm.body!), {'code': '123456'});
@@ -164,7 +152,124 @@ void main() {
     expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
     expect(find.text(copy(SpecCopyKey.receiptPhone)), findsOneWidget);
     expect(find.text(copy(SpecCopyKey.errorsRefreshFailed)), findsNothing);
-    expect(submitted, isNotNull);
+    final before = contactSession('phone_verification')['data'];
+    expect(submitted, before);
+    expect(
+      (submitted!['profile']['verification_requirements'] as List).single,
+      {'verification_type': 'phone_verification', 'settings': null},
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('removing the flow while a code is confirmed is safe', (
+    tester,
+  ) async {
+    final hold = Completer<void>();
+    final backend = Backend()
+      ..sessions.addAll([contactSession('phone_verification'), doneSession()])
+      ..holdSubmit = hold;
+    var submitted = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CredflareVerification(
+          autoStart: true,
+          onClose: () {},
+          onSubmitted: (_) => submitted++,
+          httpClient: backend.client,
+          sessionProvider: () async => descriptor(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await sendDestination(tester, ContactChannel.phone, '+237650000001');
+    await confirmCode(tester, '123456');
+    await tester.pumpWidget(const SizedBox());
+    hold.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(backend.requests.where((r) => r.method == 'GET'), hasLength(1));
+    expect(submitted, 0);
+  });
+
+  for (final route in ['close', 'back']) {
+    testWidgets('leaving a leave rejection by $route reports its code', (
+      tester,
+    ) async {
+      final rejection = fixture('rejections/phone.not_configured');
+      final backend = Backend()
+        ..sessions.add(contactSession('phone_verification'))
+        ..codeRejections.add(rejection);
+      final hostActions = <String?>[];
+      var cancelled = 0;
+      var closed = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CredflareVerification(
+            autoStart: true,
+            onClose: () => closed++,
+            onCancelled: () => cancelled++,
+            onHostActionRequired: hostActions.add,
+            httpClient: backend.client,
+            sessionProvider: () async => descriptor(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await sendDestination(tester, ContactChannel.phone, '+237650000001');
+      expect(
+        find.text(copy(SpecRejection.codes[rejection['code']]!.title)),
+        findsOneWidget,
+      );
+      if (route == 'close') {
+        await tester.tap(
+          find.descendant(
+            of: find.byType(AppBar),
+            matching: find.text(copy(SpecCopyKey.commonClose)),
+          ),
+        );
+      } else {
+        await tester.binding.handlePopRoute();
+      }
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(copy(SpecCopyKey.exitLeave)));
+      await tester.pumpAndSettle();
+      expect(hostActions, [rejection['code']]);
+      expect(cancelled, 0);
+      expect(closed, 1);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('leaving after the code screen returns is a cancel', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.add(contactSession('phone_verification'))
+      ..confirmRejections.add(fixture('rejections/phone.code_invalid'));
+    final hostActions = <String?>[];
+    var cancelled = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CredflareVerification(
+          autoStart: true,
+          onClose: () {},
+          onCancelled: () => cancelled++,
+          onHostActionRequired: hostActions.add,
+          httpClient: backend.client,
+          sessionProvider: () async => descriptor(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await sendDestination(tester, ContactChannel.phone, '+237650000001');
+    await confirmCode(tester, '000000');
+    await tester.tap(find.text(copy(SpecCopyKey.commonClose)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(copy(SpecCopyKey.exitLeave)));
+    await tester.pumpAndSettle();
+    expect(hostActions, isEmpty);
+    expect(cancelled, 1);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -304,34 +409,93 @@ void main() {
     });
   }
 
+  Future<void> capture(
+    WidgetTester tester,
+    DateTime Function() now,
+    Backend backend,
+  ) async {
+    backend.sessions.add(contactSession('phone_verification'));
+    final session = CredflareSession(descriptor(), client: backend.client);
+    final info = await session.get();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: CredflareContactCodeCapture(
+              session: session,
+              info: info,
+              channel: ContactChannel.phone,
+              onSubmitted: () {},
+              onLeave: (_) {},
+              onBusyChanged: (_) {},
+              now: now,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> waitScreen(
     WidgetTester tester,
     Map<String, dynamic> rejection,
     DateTime Function() now,
     Backend backend,
   ) async {
-    backend
-      ..sessions.add(contactSession('phone_verification'))
-      ..codeRejections.add(rejection);
-    final session = CredflareSession(descriptor(), client: backend.client);
-    final info = await session.get();
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: CredflareContactCodeCapture(
-            session: session,
-            info: info,
-            channel: ContactChannel.phone,
-            onSubmitted: () {},
-            onLeave: (_) {},
-            onBusyChanged: (_) {},
-            now: now,
-          ),
-        ),
-      ),
-    );
+    backend.codeRejections.add(rejection);
+    await capture(tester, now, backend);
     await sendDestination(tester, ContactChannel.phone, '+237650000001');
   }
+
+  testWidgets('resend counts down to the server time of the code', (
+    tester,
+  ) async {
+    final sent = fixture('phone-code-request')['data'];
+    final at = DateTime.parse(sent['resend_available_at'] as String);
+    var now = at.subtract(const Duration(seconds: 40));
+    final backend = Backend();
+    await capture(tester, () => now, backend);
+    await sendDestination(tester, ContactChannel.phone, '+237650000001');
+    expect(
+      find.text(copy(SpecCopyKey.contactCodeResendIn, {'seconds': 40})),
+      findsOneWidget,
+    );
+    final resend = find.widgetWithText(
+      TextButton,
+      copy(SpecCopyKey.contactCodeResend),
+    );
+    expect(tester.widget<TextButton>(resend).onPressed, isNull);
+    now = at;
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.widget<TextButton>(resend).onPressed, isNotNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a retry after changing the number uses the new number', (
+    tester,
+  ) async {
+    final rejection = fixture('rejections/phone.resend_too_soon');
+    final at = DateTime.parse(rejection['resend_available_at'] as String);
+    var now = at.subtract(const Duration(seconds: 30));
+    final backend = Backend();
+    await capture(tester, () => now, backend);
+    await sendDestination(tester, ContactChannel.phone, '+237650000001');
+    expect(find.text(copy(SpecCopyKey.contactCodeTitle)), findsOneWidget);
+    await tapText(tester, copy(SpecCopyKey.phoneChange));
+    await tester.pump();
+    backend.codeRejections.add(rejection);
+    await sendDestination(tester, ContactChannel.phone, '+237650000002');
+    final label = copy(SpecRejection.actionLabels['wait']!);
+    expect(find.text(copy(SpecCopyKey.contactCodeTitle)), findsOneWidget);
+    now = at;
+    await tester.pump(const Duration(seconds: 1));
+    await tapText(tester, label);
+    await settle(tester);
+    final sends = posts(backend, '/phone-codes');
+    expect(sends, hasLength(3));
+    expect(jsonDecode(sends.last.body!), {'phone': '+237650000002'});
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('a wait rejection enables a new code at its resend time', (
     tester,
@@ -348,6 +512,16 @@ void main() {
       find.text(copy(SpecCopyKey.contactCodeResendIn, {'seconds': 45})),
       findsOneWidget,
     );
+    expect(
+      find.text(
+        copy(SpecCopyKey.contactCodeBody, {
+          'destination': '+237650000001',
+          'minutes': SpecRequirements.contactCodesTtlMinutes,
+        }),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(copy(SpecCopyKey.contactCodeLabel)), findsOneWidget);
     now = at;
     await tester.pump(const Duration(seconds: 1));
     expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
