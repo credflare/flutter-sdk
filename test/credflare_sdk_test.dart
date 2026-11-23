@@ -415,6 +415,7 @@ void main() {
     expect(facial.gestureCount, 3);
     expect(facial.recordVideo, isTrue);
     expect(facial.gestures, contains('nod'));
+    expect(facial.videoRetentionDays, 30);
     final location = requirements.last.location;
     expect(location.maxAccuracyM, 50);
     expect(location.maxAgeS, 60);
@@ -449,9 +450,23 @@ void main() {
       facial.recordVideo,
       SpecSettings.facialVerificationRecordVideoDefault,
     );
+    expect(facial.videoRetentionDays, isNull);
     final location = LocationRequirementSettings.fromJson(null);
     expect(location.maxAccuracyM, 100);
     expect(location.reference, isNull);
+  });
+  test('passes video retention days through and keeps null', () {
+    expect(
+      FacialSettings.fromJson({'video_retention_days': 90}).videoRetentionDays,
+      90,
+    );
+    expect(
+      FacialSettings.fromJson({
+        'video_retention_days': null,
+      }).videoRetentionDays,
+      isNull,
+    );
+    expect(FacialSettings.fromJson({}).videoRetentionDays, isNull);
   });
   test('rejects remote HTTP API destinations', () {
     expect(
