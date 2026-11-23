@@ -95,6 +95,7 @@ class _VerificationState extends State<CredflareVerification> {
   bool _closed = false;
   String? _error;
   String? _leaveCode;
+  bool _questionsToHost = false;
   final _received = <String>[];
   final _answers = <String, Object?>{};
 
@@ -366,7 +367,11 @@ class _VerificationState extends State<CredflareVerification> {
         .where((item) => sdkVerificationTypes.contains(item.type))
         .firstOrNull;
     final questions = formQuestions(_info);
-    final askQuestions = questions.isNotEmpty && canAskQuestions(questions);
+    final earlier = {..._answers, ...formAnswers(_info)};
+    final askQuestions =
+        questions.isNotEmpty &&
+        !_questionsToHost &&
+        canAskQuestions(questions, earlier);
     final hostSteps =
         profile == null ||
         (questions.isNotEmpty && !askQuestions) ||
@@ -460,12 +465,13 @@ class _VerificationState extends State<CredflareVerification> {
           key: ValueKey(questions.map((q) => q['key']).join(',')),
           session: _session!,
           info: _info!,
-          earlierAnswers: _answers,
+          earlierAnswers: earlier,
           onSubmitted: (fields) {
             _answers.addAll(fields);
             _refresh(copy(SpecCopyKey.receiptAnswers));
           },
           onBusyChanged: _busy,
+          onUnsupported: () => setState(() => _questionsToHost = true),
         ),
       ];
     }

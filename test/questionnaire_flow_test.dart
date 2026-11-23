@@ -294,6 +294,127 @@ void main() {
     }
   });
 
+  testWidgets('founders are asked as names and whether the applicant is one', (
+    tester,
+  ) async {
+    final session = questionnaireWith((schema) {
+      schema.insert(schema.length - 1, {
+        'key': 'founders',
+        'label': 'Founders',
+        'type': 'founders',
+        'required': true,
+      });
+    });
+    final backend = Backend()
+      ..sessions.addAll([session, fixture('requirement-added-session')]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    expect(question('founders'), findsOneWidget);
+    await answerRequired(tester);
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(
+      find.descendant(
+        of: question('founders'),
+        matching: find.text(copy(SpecCopyKey.questionsRequired)),
+      ),
+      findsOneWidget,
+    );
+    await tapText(tester, copy(SpecCopyKey.questionsFoundersIncludesMe));
+    await type(tester, 'founders-0', ' Ada Obi ');
+    await tapText(tester, copy(SpecCopyKey.questionsFoundersAdd));
+    await type(tester, 'founders-1', 'Ben Eto');
+    await tapText(tester, copy(SpecCopyKey.questionsFoundersAdd));
+    await type(tester, 'founders-2', 'Cy Doe');
+    await tester.tap(
+      find.text(copy(SpecCopyKey.questionsFoundersRemove)).at(2),
+    );
+    await tester.pumpAndSettle();
+    await tapText(tester, copy(SpecCopyKey.questionsFoundersAdd));
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect((lastSubmit(backend)['fields'] as Map)['founders'], {
+      'includes_applicant': true,
+      'names': ['Ada Obi', 'Ben Eto'],
+    });
+  });
+
+  test('only a visible question of an unknown type sends the form back', () {
+    final schema = [
+      for (final q
+          in fixture('questionnaire-session')['data']['profile']['form_schema']
+              as List)
+        Map<String, dynamic>.from(q as Map),
+    ];
+    final employer = schema.firstWhere((q) => q['key'] == 'employer');
+    expect(canAskQuestions(schema), isTrue);
+    employer['type'] = 'signature';
+    expect(canAskQuestions(schema), isTrue);
+    expect(canAskQuestions(schema, {'employment': 'Employed'}), isFalse);
+    employer.remove('show_if');
+    expect(canAskQuestions(schema), isFalse);
+  });
+
+  testWidgets('an unknown question revealed by an answer goes to the host', (
+    tester,
+  ) async {
+    final session = questionnaireWith((schema) {
+      schema.firstWhere((q) => q['key'] == 'employer')['type'] = 'signature';
+    });
+    final backend = Backend()..sessions.add(session);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    expect(find.text(copy(SpecCopyKey.questionsTitle)), findsOneWidget);
+    await answerRequired(tester);
+    await choose(tester, 'employment', 'Employed');
+    expect(question('employer'), findsNothing);
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(backend.requests.where((r) => r.path.endsWith('/submit')), isEmpty);
+    expect(find.text(copy(SpecCopyKey.questionsTitle)), findsNothing);
+    expect(find.text(copy(SpecCopyKey.emailTitle)), findsOneWidget);
+  });
+
+  testWidgets('earlier answers of the case decide which questions show', (
+    tester,
+  ) async {
+    final session = fixture('questionnaire-earlier-answers-session');
+    final backend = Backend()
+      ..sessions.addAll([session, fixture('requirement-added-session')]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    expect(question('employer'), findsOneWidget);
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(find.text(copy(SpecCopyKey.questionsRequired)), findsOneWidget);
+    await type(tester, 'employer', 'Acme');
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(lastSubmit(backend)['fields'], {'employer': 'Acme'});
+  });
+
+  testWidgets('an earlier answer asked again starts with its value', (
+    tester,
+  ) async {
+    final session = fixture('questionnaire-earlier-answers-session');
+    final employment =
+        (fixture('questionnaire-session')['data']['profile']['form_schema']
+                as List)
+            .firstWhere((q) => q['key'] == 'employment');
+    (session['data']['profile']['form_schema'] as List).insert(0, employment);
+    final backend = Backend()
+      ..sessions.addAll([session, fixture('requirement-added-session')]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: question('employment'),
+        matching: find.text('Employed'),
+      ),
+      findsOneWidget,
+    );
+    await type(tester, 'employer', 'Acme');
+    await choose(tester, 'employment', 'Student');
+    expect(question('employer'), findsNothing);
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect(lastSubmit(backend)['fields'], {'employment': 'Student'});
+  });
+
   testWidgets('the date picker reaches dates before 1900', (tester) async {
     final backend = Backend()
       ..sessions.addAll([

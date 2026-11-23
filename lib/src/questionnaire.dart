@@ -272,6 +272,7 @@ const questionnaireTypes = [
   'multi_select',
   'country',
   'consent',
+  'founders',
 ];
 
 /// The questions still to answer, or an empty list.
@@ -280,9 +281,28 @@ List<Map<String, dynamic>> formQuestions(Map? info) => [
     Map<String, dynamic>.from(item as Map),
 ];
 
-/// Whether this SDK can ask every question in the list.
-bool canAskQuestions(List<Map<String, dynamic>> questions) =>
-    questions.every((q) => questionnaireTypes.contains(q['type'] ?? 'text'));
+/// Earlier answers of the case that the outstanding questions depend on.
+Map<String, Object?> formAnswers(Map? info) {
+  final answers = (info?['profile'] as Map?)?['form_answers'];
+  return answers is Map ? Map<String, Object?>.from(answers) : {};
+}
+
+bool _supported(Map q) => questionnaireTypes.contains(q['type'] ?? 'text');
+
+/// Whether this SDK can ask the questions in the list: every question of a
+/// type it cannot ask is hidden by the earlier answers.
+bool canAskQuestions(
+  List<Map<String, dynamic>> questions, [
+  Map<String, Object?> earlierAnswers = const {},
+]) {
+  final context = Map<String, Object?>.from(earlierAnswers);
+  for (final q in questions) {
+    final visible = questionVisible(q, context);
+    if (!_supported(q) && visible) return false;
+    if (!visible) context.remove(q['key']);
+  }
+  return true;
+}
 
 bool _blank(Object? v) => v == null || v == '' || (v is List && v.isEmpty);
 
@@ -317,6 +337,10 @@ class CredflareQuestionnaire extends StatefulWidget {
   final Map<String, Object?> earlierAnswers;
   final ValueChanged<Map<String, Object?>> onSubmitted;
   final ValueChanged<bool> onBusyChanged;
+
+  /// Called instead of sending when the answers show a question of a type
+  /// this SDK cannot ask, so the host app asks the questions.
+  final VoidCallback? onUnsupported;
   const CredflareQuestionnaire({
     super.key,
     required this.session,
@@ -324,6 +348,7 @@ class CredflareQuestionnaire extends StatefulWidget {
     required this.onSubmitted,
     required this.onBusyChanged,
     this.earlierAnswers = const {},
+    this.onUnsupported,
   });
   @override
   State<CredflareQuestionnaire> createState() => _QuestionnaireState();
@@ -333,16 +358,50 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
   late final List<Map<String, dynamic>> _questions = formQuestions(widget.info);
   final _values = <String, Object?>{};
   final _text = <String, TextEditingController>{};
+  final _founders = <String, List<TextEditingController>>{};
   final _errors = <String, String>{};
   bool _checked = false;
+  bool _unsupportedShown = false;
   bool _sending = false;
   Rejection? _rejected;
   String? _error;
   String _key = requestKey();
 
   @override
+  void initState() {
+    super.initState();
+    for (final q in _questions) {
+      final key = q['key'] as String;
+      if (!widget.earlierAnswers.containsKey(key)) continue;
+      final value = widget.earlierAnswers[key];
+      switch (_type(q)) {
+        case 'consent':
+          _values[key] = value == true;
+        case 'multi_select':
+          if (value is List) _values[key] = {for (final v in value) '$v'};
+        case 'select' || 'single_select' || 'country' || 'date':
+          if (value is String) _values[key] = value;
+        case 'founders':
+          if (value is Map) {
+            _values[key] = value['includes_applicant'] == true;
+            final names = value['names'];
+            if (names is List && names.isNotEmpty) {
+              _founders[key] = [
+                for (final name in names) TextEditingController(text: '$name'),
+              ];
+            }
+          }
+        default:
+          if (value is String || value is num) {
+            _controller(key).text = '$value';
+          }
+      }
+    }
+  }
+
+  @override
   void dispose() {
-    for (final c in _text.values) {
+    for (final c in [..._text.values, ..._founders.values.expand((l) => l)]) {
       c.dispose();
     }
     super.dispose();
@@ -352,6 +411,9 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
 
   TextEditingController _controller(String key) =>
       _text.putIfAbsent(key, () => TextEditingController());
+
+  List<TextEditingController> _names(String key) =>
+      _founders.putIfAbsent(key, () => [TextEditingController()]);
 
   Object? _answer(Map<String, dynamic> q) {
     final key = q['key'] as String;
@@ -366,6 +428,14 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
         ];
       case 'select' || 'single_select' || 'country' || 'date':
         return _values[key];
+      case 'founders':
+        final includesMe = _values[key] == true;
+        final names = [
+          for (final c in _names(key))
+            if (c.text.trim().isNotEmpty) c.text.trim(),
+        ];
+        if (!includesMe && names.isEmpty) return null;
+        return {'includes_applicant': includesMe, 'names': names};
       case 'number':
         final raw = _controller(key).text.trim();
         if (raw.isEmpty) return null;
@@ -385,12 +455,18 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
   /// Visible questions and the answers to send, evaluated in order so each
   /// show_if sees only the answers that will be sent.
   (List<Map<String, dynamic>>, Map<String, Object?>) _evaluate() {
+    _unsupportedShown = false;
     final context = Map<String, Object?>.from(widget.earlierAnswers);
     final visible = <Map<String, dynamic>>[];
     final fields = <String, Object?>{};
     for (final q in _questions) {
       final key = q['key'] as String;
       if (!questionVisible(q, context)) {
+        context.remove(key);
+        continue;
+      }
+      if (!_supported(q)) {
+        _unsupportedShown = true;
         context.remove(key);
         continue;
       }
@@ -484,6 +560,10 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
       _error = null;
     });
     if (_errors.isNotEmpty) return;
+    if (_unsupportedShown && widget.onUnsupported != null) {
+      widget.onUnsupported!();
+      return;
+    }
     setState(() => _sending = true);
     widget.onBusyChanged(true);
     try {
@@ -650,6 +730,73 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
                     }
                   : null,
             ),
+          ],
+        );
+      case 'founders':
+        final names = _names(key);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _label(theme, q),
+            CheckboxListTile(
+              value: _values[key] == true,
+              onChanged: enabled
+                  ? (v) {
+                      _values[key] = v == true;
+                      _changed();
+                    }
+                  : null,
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              title: Text(copy(SpecCopyKey.questionsFoundersIncludesMe)),
+            ),
+            for (final (i, name) in names.indexed)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: ValueKey('question-$key-$i'),
+                        controller: name,
+                        enabled: enabled,
+                        textCapitalization: TextCapitalization.words,
+                        autofillHints: const [AutofillHints.name],
+                        decoration: InputDecoration(
+                          labelText: copy(SpecCopyKey.questionsFoundersName),
+                        ),
+                        onChanged: (_) => _changed(),
+                      ),
+                    ),
+                    if (names.length > 1)
+                      TextButton(
+                        onPressed: enabled
+                            ? () {
+                                final removed = names.removeAt(i);
+                                _changed();
+                                WidgetsBinding.instance.addPostFrameCallback(
+                                  (_) => removed.dispose(),
+                                );
+                              }
+                            : null,
+                        child: Text(copy(SpecCopyKey.questionsFoundersRemove)),
+                      ),
+                  ],
+                ),
+              ),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                onPressed: enabled
+                    ? () {
+                        names.add(TextEditingController());
+                        _changed();
+                      }
+                    : null,
+                child: Text(copy(SpecCopyKey.questionsFoundersAdd)),
+              ),
+            ),
+            _errorText(theme, error),
           ],
         );
       case 'date':
