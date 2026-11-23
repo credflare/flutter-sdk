@@ -1,9 +1,9 @@
 // GENERATED FILE, DO NOT EDIT.
-// Source: credflare sdk-spec 1.1.0 (1489c6c1b827). Regenerate with scripts/generate.mjs.
+// Source: credflare sdk-spec 1.1.0 (eb176f038a44). Regenerate with scripts/generate.mjs.
 // ignore_for_file: type=lint
 
 const String credflareSpecVersion = '1.1.0';
-const String credflareSpecHash = '1489c6c1b827';
+const String credflareSpecHash = 'eb176f038a44';
 
 /// One step of a gesture. value and holdFrames name a threshold key.
 final class SpecGestureStep {
@@ -587,6 +587,7 @@ abstract final class SpecCopy {
     'email.send': 'Send code',
     'email.invalid': 'Enter a valid email address.',
     'email.change': 'Use a different email address',
+    'email.change_after': 'You can use a different email address when the countdown ends.',
     'phone.title': 'Confirm your phone number',
     'phone.body': '{verifier} asks you to confirm a phone number. We will send a short code to it by text message.',
     'phone.label': 'Phone number',
@@ -594,6 +595,7 @@ abstract final class SpecCopy {
     'phone.send': 'Send code',
     'phone.invalid': 'Enter the number in international format, starting with + and the country code.',
     'phone.change': 'Use a different phone number',
+    'phone.change_after': 'You can use a different phone number when the countdown ends.',
     'contact_code.sending': 'Sending a code…',
     'contact_code.title': 'Enter the code',
     'contact_code.body': 'We sent a code to {destination}. It expires in {minutes} minutes.',
@@ -873,6 +875,7 @@ abstract final class SpecCopyKey {
   static const String emailSend = 'email.send';
   static const String emailInvalid = 'email.invalid';
   static const String emailChange = 'email.change';
+  static const String emailChangeAfter = 'email.change_after';
   static const String phoneTitle = 'phone.title';
   static const String phoneBody = 'phone.body';
   static const String phoneLabel = 'phone.label';
@@ -880,6 +883,7 @@ abstract final class SpecCopyKey {
   static const String phoneSend = 'phone.send';
   static const String phoneInvalid = 'phone.invalid';
   static const String phoneChange = 'phone.change';
+  static const String phoneChangeAfter = 'phone.change_after';
   static const String contactCodeSending = 'contact_code.sending';
   static const String contactCodeTitle = 'contact_code.title';
   static const String contactCodeBody = 'contact_code.body';
