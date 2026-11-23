@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:credflare_sdk/credflare_sdk.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/fixtures.dart';
@@ -29,6 +31,20 @@ void main() {
           'key': 'q',
           'show_if': item['show_if'],
         }, form is Map ? Map<String, Object?>.from(form) : {}),
+        item['expect'],
+      );
+    });
+  }
+
+  final reference =
+      jsonDecode(
+            File('test/support/reference-conditions.json').readAsStringSync(),
+          )
+          as List;
+  for (final item in reference) {
+    test('reference evaluator: ${item['name']}', () {
+      expect(
+        testCondition(item['condition'] as Map, {'form': item['form']}),
         item['expect'],
       );
     });

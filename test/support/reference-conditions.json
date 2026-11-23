@@ -1,0 +1,239 @@
+[
+  {
+    "name": "regex ascii digit class rejects arabic indic digits",
+    "condition": {
+      "path": "form.a",
+      "op": "regex",
+      "value": "^\\d+$"
+    },
+    "form": {
+      "a": "٣٤"
+    },
+    "expect": false
+  },
+  {
+    "name": "regex letter property matches accented letter",
+    "condition": {
+      "path": "form.a",
+      "op": "regex",
+      "value": "^\\p{L}+$"
+    },
+    "form": {
+      "a": "élan"
+    },
+    "expect": true
+  },
+  {
+    "name": "regex word class rejects accented letter",
+    "condition": {
+      "path": "form.a",
+      "op": "regex",
+      "value": "^\\w+$"
+    },
+    "form": {
+      "a": "é"
+    },
+    "expect": false
+  },
+  {
+    "name": "regex dot matches one astral character",
+    "condition": {
+      "path": "form.a",
+      "op": "regex",
+      "value": "^.$"
+    },
+    "form": {
+      "a": "😀"
+    },
+    "expect": true
+  },
+  {
+    "name": "fuzzy normalises case and unicode spaces",
+    "condition": {
+      "path": "form.a",
+      "op": "fuzzy_match",
+      "value": {
+        "text": "école  paris",
+        "min_score": 100
+      }
+    },
+    "form": {
+      "a": " ÉCOLE  Paris "
+    },
+    "expect": true
+  },
+  {
+    "name": "fuzzy counts utf8 bytes",
+    "condition": {
+      "path": "form.a",
+      "op": "fuzzy_match",
+      "value": {
+        "text": "caf😀",
+        "min_score": 70
+      }
+    },
+    "form": {
+      "a": "cafe"
+    },
+    "expect": false
+  },
+  {
+    "name": "contains lowercases dotted capital I",
+    "condition": {
+      "path": "form.a",
+      "op": "contains",
+      "value": "i̇stanbul"
+    },
+    "form": {
+      "a": "İSTANBUL"
+    },
+    "expect": true
+  },
+  {
+    "name": "gte overflow to infinity on both sides",
+    "condition": {
+      "path": "form.a",
+      "op": "gte",
+      "value": "1e309"
+    },
+    "form": {
+      "a": "1e309"
+    },
+    "expect": false
+  },
+  {
+    "name": "lte overflow to infinity on both sides",
+    "condition": {
+      "path": "form.a",
+      "op": "lte",
+      "value": "1e309"
+    },
+    "form": {
+      "a": "1e309"
+    },
+    "expect": false
+  },
+  {
+    "name": "gt infinity against a number",
+    "condition": {
+      "path": "form.a",
+      "op": "gt",
+      "value": 5
+    },
+    "form": {
+      "a": "1e309"
+    },
+    "expect": true
+  },
+  {
+    "name": "lt negative infinity against infinity",
+    "condition": {
+      "path": "form.a",
+      "op": "lt",
+      "value": "1e309"
+    },
+    "form": {
+      "a": "-1e309"
+    },
+    "expect": true
+  },
+  {
+    "name": "equals infinity strings",
+    "condition": {
+      "path": "form.a",
+      "op": "equals",
+      "value": "1e309"
+    },
+    "form": {
+      "a": "1e309"
+    },
+    "expect": true
+  },
+  {
+    "name": "equals number with trailing dot",
+    "condition": {
+      "path": "form.a",
+      "op": "equals",
+      "value": 1
+    },
+    "form": {
+      "a": "1."
+    },
+    "expect": true
+  },
+  {
+    "name": "equals number with vertical tab padding",
+    "condition": {
+      "path": "form.a",
+      "op": "equals",
+      "value": 12
+    },
+    "form": {
+      "a": "\u000b12 "
+    },
+    "expect": true
+  },
+  {
+    "name": "equals number with leading dot",
+    "condition": {
+      "path": "form.a",
+      "op": "equals",
+      "value": 0.5
+    },
+    "form": {
+      "a": ".5"
+    },
+    "expect": true
+  },
+  {
+    "name": "equals text with non breaking space is not numeric",
+    "condition": {
+      "path": "form.a",
+      "op": "equals",
+      "value": 12
+    },
+    "form": {
+      "a": " 12"
+    },
+    "expect": false
+  },
+  {
+    "name": "contains uses the final sigma at a word end",
+    "condition": {
+      "path": "form.a",
+      "op": "contains",
+      "value": "οδος"
+    },
+    "form": {
+      "a": "ΟΔΟΣ"
+    },
+    "expect": true
+  },
+  {
+    "name": "contains keeps a medial sigma",
+    "condition": {
+      "path": "form.a",
+      "op": "contains",
+      "value": "σα"
+    },
+    "form": {
+      "a": "ΣΑ"
+    },
+    "expect": true
+  },
+  {
+    "name": "fuzzy lowercases a final sigma before punctuation",
+    "condition": {
+      "path": "form.a",
+      "op": "fuzzy_match",
+      "value": {
+        "text": "οδος.",
+        "min_score": 100
+      }
+    },
+    "form": {
+      "a": "ΟΔΟΣ."
+    },
+    "expect": true
+  }
+]

@@ -111,9 +111,9 @@ int? _time(String s) {
   return DateTime.tryParse(iso)?.millisecondsSinceEpoch;
 }
 
-int? _compare(Object? actual, Object? expected) {
+num? _compare(Object? actual, Object? expected) {
   if (_isNumeric(actual) && _isNumeric(expected)) {
-    return (_number(actual) - _number(expected)).sign.toInt();
+    return (_number(actual) - _number(expected)).sign;
   }
   if (actual is String &&
       expected is String &&
@@ -126,6 +126,20 @@ int? _compare(Object? actual, Object? expected) {
   return null;
 }
 
+final _ignorable = r"[\p{Mn}\p{Me}\p{Cf}\p{Lm}\p{Sk}'.:\u00B7\u2019]*";
+final _finalSigma = RegExp(
+  '(?<=[\\p{Lu}\\p{Ll}\\p{Lt}]$_ignorable)\u03A3'
+  '(?!$_ignorable[\\p{Lu}\\p{Ll}\\p{Lt}])',
+  unicode: true,
+);
+
+/// Lower case as the reference evaluator does, including the mappings Dart
+/// leaves out: the dotted capital I and the final sigma.
+String _lower(String v) => v
+    .replaceAll('\u0130', 'i\u0307')
+    .replaceAll(_finalSigma, '\u03C2')
+    .toLowerCase();
+
 bool _within(Object? needle, Object? haystack) => _values(
   haystack,
 ).any((c) => !_isMap(c) && !_isMap(needle) && _equals(needle, c));
@@ -133,7 +147,7 @@ bool _within(Object? needle, Object? haystack) => _values(
 bool _contains(Object? actual, Object? expected) {
   if (_isMap(actual)) return _within(expected, actual);
   if (_isScalar(actual) && _isScalar(expected) && _text(expected) != '') {
-    return _text(actual).toLowerCase().contains(_text(expected).toLowerCase());
+    return _lower(_text(actual)).contains(_lower(_text(expected)));
   }
   return false;
 }
@@ -188,7 +202,7 @@ bool _fuzzy(Object? actual, Object? expected) {
     return false;
   }
   String normalize(Object? v) =>
-      _text(v).toLowerCase().trim().replaceAll(RegExp(r'\s+'), ' ');
+      _lower(_text(v)).trim().replaceAll(RegExp(r'\s+'), ' ');
   final score =
       expected['min_score'] ?? SpecRequirements.showIfFuzzyDefaultMinScore;
   if (!_isNumeric(score)) return false;
@@ -231,7 +245,7 @@ bool testCondition(Map condition, Object? context) {
       return !empty;
   }
   if (missing) return false;
-  bool cmp(bool Function(int) holds) {
+  bool cmp(bool Function(num) holds) {
     final c = _compare(actual, expected);
     return c != null && holds(c);
   }
