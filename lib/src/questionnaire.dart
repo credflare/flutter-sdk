@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'client.dart';
 import 'conditions.dart';
+import 'country_names.dart';
 import 'copy.dart';
 import 'rejection.dart';
 import 'spec.generated.dart';
+import 'theme.dart';
 import 'ui.dart';
 
 const countryCodes = [
@@ -326,6 +328,98 @@ bool _realDate(String value) {
 
 String _flag(String code) =>
     String.fromCharCodes(code.codeUnits.map((c) => 0x1F1E6 + c - 0x41));
+
+Future<String?> _pickCountry(BuildContext context, String? selected) =>
+    showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => _CountrySheet(selected: selected),
+    );
+
+class _CountrySheet extends StatefulWidget {
+  final String? selected;
+  const _CountrySheet({this.selected});
+  @override
+  State<_CountrySheet> createState() => _CountrySheetState();
+}
+
+class _CountrySheetState extends State<_CountrySheet> {
+  var _filter = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final text = _filter.trim().toLowerCase();
+    final entries = [
+      for (final entry in countryNames.entries)
+        if (text.isEmpty ||
+            entry.value.toLowerCase().contains(text) ||
+            entry.key.toLowerCase() == text)
+          entry,
+    ];
+    return FractionallySizedBox(
+      heightFactor: 0.85,
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                CredflareTheme.gutter,
+                CredflareTheme.gutter,
+                CredflareTheme.gutter,
+                12,
+              ),
+              child: Text(
+                copy(SpecCopyKey.questionsChooseCountry),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: CredflareTheme.gutter,
+              ),
+              child: TextField(
+                key: const ValueKey('country-search'),
+                textInputAction: TextInputAction.search,
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (value) => setState(() => _filter = value),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: entries.length,
+                itemBuilder: (context, index) {
+                  final entry = entries[index];
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: CredflareTheme.gutter,
+                    ),
+                    leading: Text(
+                      _flag(entry.key),
+                      style: theme.textTheme.titleLarge,
+                    ),
+                    title: Text(entry.value),
+                    selected: entry.key == widget.selected,
+                    onTap: () => Navigator.of(context).pop(entry.key),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 String _formatDate(DateTime d) =>
     '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -705,9 +799,43 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
             _errorText(theme, error),
           ],
         );
-      case 'select' || 'single_select' || 'country':
-        final country = _type(q) == 'country';
-        final items = country ? countryCodes : options;
+      case 'country':
+        final code = _values[key] as String?;
+        final name = code == null ? null : countryNames[code] ?? code;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _label(theme, q),
+            InkWell(
+              key: ValueKey('question-$key'),
+              borderRadius: BorderRadius.circular(CredflareTheme.radius),
+              onTap: enabled
+                  ? () async {
+                      final picked = await _pickCountry(context, code);
+                      if (picked == null || !mounted) return;
+                      _values[key] = picked;
+                      _changed();
+                    }
+                  : null,
+              child: InputDecorator(
+                isEmpty: name == null,
+                decoration: InputDecoration(
+                  hintText: copy(SpecCopyKey.questionsChooseCountry),
+                  errorText: error,
+                  enabled: enabled,
+                  suffixIcon: const Icon(Icons.arrow_drop_down),
+                ),
+                child: name == null
+                    ? null
+                    : Text(
+                        '${_flag(code!)}  $name',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+              ),
+            ),
+          ],
+        );
+      case 'select' || 'single_select':
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -717,22 +845,13 @@ class _QuestionnaireState extends State<CredflareQuestionnaire> {
               initialValue: _values[key] as String?,
               isExpanded: true,
               menuMaxHeight: 420,
-              hint: Text(
-                copy(
-                  country
-                      ? SpecCopyKey.questionsChooseCountry
-                      : SpecCopyKey.questionsChooseOne,
-                ),
-              ),
+              hint: Text(copy(SpecCopyKey.questionsChooseOne)),
               decoration: InputDecoration(errorText: error),
               items: [
-                for (final item in items)
+                for (final item in options)
                   DropdownMenuItem(
                     value: item,
-                    child: Text(
-                      country ? '${_flag(item)}  $item' : item,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: Text(item, overflow: TextOverflow.ellipsis),
                   ),
               ],
               onChanged: enabled

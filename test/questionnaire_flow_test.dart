@@ -66,7 +66,7 @@ Future<void> pickToday(WidgetTester tester) async {
 
 Future<void> answerRequired(WidgetTester tester) async {
   await choose(tester, 'employment', 'Student');
-  await choose(tester, 'country', '${flag('AD')}  AD');
+  await choose(tester, 'country', 'Andorra');
   await pickToday(tester);
   await tapText(tester, consentLabel());
 }
@@ -131,7 +131,7 @@ void main() {
       expect(question('employer'), findsNothing);
       expect(question('income'), findsNothing);
 
-      await choose(tester, 'country', '${flag('AD')}  AD');
+      await choose(tester, 'country', 'Andorra');
       await tester.ensureVisible(
         find.byKey(const ValueKey('question-birth_date')),
       );
@@ -211,7 +211,7 @@ void main() {
     await type(tester, 'income', '50000.5');
     expect(find.text(copy(SpecCopyKey.questionsInvalidNumber)), findsNothing);
     await type(tester, 'employer', 'Acme');
-    await choose(tester, 'country', '${flag('AD')}  AD');
+    await choose(tester, 'country', 'Andorra');
     await tester.ensureVisible(
       find.byKey(const ValueKey('question-birth_date')),
     );
@@ -563,7 +563,7 @@ void main() {
     await tester.pumpWidget(flow(backend));
     await tester.pumpAndSettle();
     await choose(tester, 'employment', 'Student');
-    await choose(tester, 'country', '${flag('AD')}  AD');
+    await choose(tester, 'country', 'Andorra');
     await tester.ensureVisible(
       find.byKey(const ValueKey('question-birth_date')),
     );
@@ -599,7 +599,7 @@ void main() {
     await tester.pumpAndSettle();
     await choose(tester, 'employment', 'Employed');
     await type(tester, 'employer', 'Acme');
-    await choose(tester, 'country', '${flag('AD')}  AD');
+    await choose(tester, 'country', 'Andorra');
     await tester.ensureVisible(
       find.byKey(const ValueKey('question-birth_date')),
     );
@@ -678,5 +678,52 @@ void main() {
     expect(SpecRequirements.refreshOpenStatuses, isNot(contains('submitted')));
     expect(find.text(copy(SpecCopyKey.receiptTitle)), findsOneWidget);
     expect(find.text(copy(SpecCopyKey.phoneTitle)), findsNothing);
+  });
+
+  testWidgets('countries are listed by name, searchable and sent as codes', (
+    tester,
+  ) async {
+    final backend = Backend()
+      ..sessions.addAll([
+        fixture('questionnaire-session'),
+        fixture('requirement-added-session'),
+      ]);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    final field = find.byKey(const ValueKey('question-country'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    expect(find.text('Afghanistan'), findsOneWidget);
+    expect(find.text(flag('AF')), findsOneWidget);
+    expect(find.text('AF'), findsNothing);
+
+    final search = find.byKey(const ValueKey('country-search'));
+    await tester.enterText(search, 'germ');
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(ListTile),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Germany'), findsOneWidget);
+    await tester.enterText(search, 'ci');
+    await tester.pumpAndSettle();
+    expect(find.text('Côte d’Ivoire'), findsOneWidget);
+    await tester.enterText(search, 'germany');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Germany'));
+    await tester.pumpAndSettle();
+    expect(find.text('${flag('DE')}  Germany'), findsOneWidget);
+
+    await choose(tester, 'employment', 'Student');
+    await pickToday(tester);
+    await tapText(tester, consentLabel());
+    await tapText(tester, copy(SpecCopyKey.questionsSend));
+    expect((lastSubmit(backend)['fields'] as Map)['country'], 'DE');
+    await tester.pumpWidget(const SizedBox());
   });
 }
