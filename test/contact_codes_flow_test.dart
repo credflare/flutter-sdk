@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:credflare_sdk/credflare_sdk.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'support/backend.dart';
 import 'support/fakes.dart';
@@ -627,6 +628,39 @@ void main() {
     await tapText(tester, copy(SpecRejection.actionLabels['retry']!));
     await settle(tester);
     expect(find.text(copy(SpecCopyKey.phoneTitle)), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('the header centres the requester and wraps a long name', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    const long = 'Harbour Credit Union';
+    final raw = contactSession('phone_verification');
+    raw['data']['requester']['name'] = long;
+    final backend = Backend()..sessions.add(raw);
+    await tester.pumpWidget(flow(backend));
+    await tester.pumpAndSettle();
+    final name = find.text(long);
+    final badge = find.text(copy(SpecCopyKey.commonTestMode));
+    expect(tester.getCenter(name).dx, closeTo(195, 1));
+    expect(tester.getCenter(badge).dx, closeTo(195, 1));
+    expect(
+      tester.getTopLeft(badge).dy,
+      greaterThan(tester.getBottomLeft(name).dy),
+    );
+    final paragraph = tester.renderObject<RenderParagraph>(name);
+    expect(paragraph.didExceedMaxLines, isFalse);
+    expect(tester.getSize(name).height, greaterThan(30));
+    expect(paragraph.textAlign, TextAlign.center);
+    final close = find.descendant(
+      of: find.byType(AppBar),
+      matching: find.text(copy(SpecCopyKey.commonClose)),
+    );
+    expect(tester.getCenter(close).dx, greaterThan(300));
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
 }

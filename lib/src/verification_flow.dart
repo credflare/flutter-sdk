@@ -621,22 +621,43 @@ class _VerificationState extends State<CredflareVerification> {
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
-          titleSpacing: CredflareTheme.gutter,
+          centerTitle: true,
+          titleSpacing: 8,
+          toolbarHeight: CredflareVerifierBar.toolbarHeight(
+            context,
+            name: requester?['name'] as String?,
+            logoUrl: requester?['logo_url'] as String?,
+            sandbox: _info?['environment'] == 'sandbox',
+            width:
+                MediaQuery.sizeOf(context).width -
+                2 * CredflareVerifierBar.sideWidth -
+                16,
+          ),
+          leadingWidth: CredflareVerifierBar.sideWidth,
+          leading: const SizedBox.shrink(),
           title: CredflareVerifierBar(
             name: requester?['name'] as String?,
             logoUrl: requester?['logo_url'] as String?,
             sandbox: _info?['environment'] == 'sandbox',
           ),
           actions: [
-            TextButton(
-              onPressed: _loading || _captureBusy
-                  ? null
-                  : allReceived
-                  ? widget.onClose
-                  : _leave,
-              child: Text(copy(SpecCopyKey.commonClose)),
+            SizedBox(
+              width: CredflareVerifierBar.sideWidth,
+              child: Center(
+                child: TextButton(
+                  onPressed: _loading || _captureBusy
+                      ? null
+                      : allReceived
+                      ? widget.onClose
+                      : _leave,
+                  child: Text(
+                    copy(SpecCopyKey.commonClose),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
             ),
-            const SizedBox(width: 12),
           ],
         ),
         body: SafeArea(
